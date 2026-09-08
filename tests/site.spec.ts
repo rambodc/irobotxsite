@@ -114,6 +114,14 @@ test("About anchors, primary call to action and brand assets work", async ({
   for (const id of ["oil-gas", "robotics", "fintech"]) {
     await page.goto("/about#" + id);
     await expect(page.locator("#" + id)).toBeVisible();
+    await expect
+      .poll(() =>
+        page.locator("#" + id).evaluate((el) => {
+          const top = el.getBoundingClientRect().top;
+          return top >= 0 && top < 180;
+        }),
+      )
+      .toBe(true);
   }
   for (const path of [
     "/favicon.svg",

@@ -749,6 +749,20 @@ function Contact() {
 export default function App() {
   const [path, setPath] = useState(location.pathname.replace(/\/$/, "") || "/");
   useEffect(() => {
+    // The target does not exist until React has mounted the requested page.
+    let id: string;
+    try {
+      id = decodeURIComponent(location.hash.slice(1));
+    } catch {
+      return;
+    }
+    if (!id) return;
+    const frame = requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [path]);
+  useEffect(() => {
     const update = () => setPath(location.pathname.replace(/\/$/, "") || "/");
     window.addEventListener("popstate", update);
     return () => window.removeEventListener("popstate", update);

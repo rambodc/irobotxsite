@@ -1,21 +1,70 @@
 {
+  "functions": { "source": "functions", "runtime": "nodejs22" },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "emulators": {
+    "auth": { "port": 9099 },
+    "firestore": { "port": 8080 },
+    "functions": { "port": 5001 },
+    "ui": { "enabled": false },
+    "singleProjectMode": true
+  },
   "hosting": {
-    "public": "public",
+    "public": "dist",
     "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "cleanUrls": true,
+    "trailingSlash": false,
     "redirects": [
-      { "source": "/live-experiences", "destination": "/music-technology", "type": 301 }
-    ],
-    "headers": [
       {
-        "source": "**/*.(css|js)",
-        "headers": [{ "key": "Cache-Control", "value": "public,max-age=3600" }]
+        "source": "/robotics-ai",
+        "destination": "/about#robotics",
+        "type": 301
       },
       {
-        "source": "**/*.(png|svg)",
-        "headers": [{ "key": "Cache-Control", "value": "public,max-age=86400" }]
-      }
+        "source": "/industrial-saas",
+        "destination": "/about#oil-gas",
+        "type": 301
+      },
+      {
+        "source": "/digital-finance",
+        "destination": "/about#fintech",
+        "type": 301
+      },
+      { "source": "/music-technology", "destination": "/about", "type": 301 },
+      { "source": "/live-experiences", "destination": "/about", "type": 301 }
     ],
-    "cleanUrls": true,
-    "trailingSlash": false
+    "rewrites": [{ "source": "**", "destination": "/index.html" }],
+    "headers": [
+      {
+        "source": "/assets/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public,max-age=31536000,immutable"
+          }
+        ]
+      },
+      {
+        "source": "/@(signin|forgot-password|accept-invite|auth|portal){,/**}",
+        "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+      },
+      {
+        "source": "**",
+        "headers": [
+          { "key": "X-Content-Type-Options", "value": "nosniff" },
+          {
+            "key": "Referrer-Policy",
+            "value": "strict-origin-when-cross-origin"
+          },
+          {
+            "key": "Permissions-Policy",
+            "value": "camera=(), microphone=(), geolocation=()"
+          },
+          { "key": "X-Frame-Options", "value": "DENY" }
+        ]
+      }
+    ]
   }
 }

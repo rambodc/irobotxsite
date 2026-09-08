@@ -1,5 +1,6 @@
 import { httpsCallable } from "firebase/functions";
-import { functions } from "./firebaseClient";
+import { getToken } from "firebase/app-check";
+import { functions, appCheck } from "./firebaseClient";
 export type AppId = "oil-gas" | "robotics" | "fintech";
 export interface Profile {
   uid: string;
@@ -21,8 +22,11 @@ export interface ContactInput {
   requestId: string;
 }
 export type Delivery = { delivery: "sent" | "failed" | "pending"; id?: string };
-const call = async <I, O>(name: string, input: I) =>
-  (await httpsCallable<I, O>(functions, name)(input)).data;
+const call = async <I, O>(name: string, input: I) => {
+  // Surface verification failures before attempting a protected operation.
+  if (appCheck) await getToken(appCheck);
+  return (await httpsCallable<I, O>(functions, name)(input)).data;
+};
 export const api = {
   profile: () => call<Record<string, never>, Profile>("getProfile", {}),
   updateProfile: (data: { name: string; company: string }) =>
@@ -47,6 +51,8 @@ export function errorMessage(error: unknown): string {
     error && typeof error === "object" && "code" in error
       ? String(error.code)
       : "";
+  if (code.startsWith("appCheck/"))
+    return "Browser verification could not complete. Please allow Google's reCAPTCHA in your browser, reload this page, and try again.";
   if (/invalid-credential|wrong-password|user-not-found/.test(code))
     return "The email or password is incorrect.";
   if (/expired-action-code|invalid-action-code/.test(code))

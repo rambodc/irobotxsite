@@ -342,6 +342,7 @@ test("Firebase authorization, invitations, rules and mail lifecycle", async (t) 
         await page
           .getByRole("button", { name: "Sign out", exact: true })
           .click();
+        await page.waitForURL("**/signin");
         await page
           .getByLabel("Email address", { exact: true })
           .fill("invited@example.com");
@@ -351,7 +352,14 @@ test("Firebase authorization, invitations, rules and mail lifecycle", async (t) 
           .click();
         await page
           .getByRole("heading", { name: "Welcome, Invited." })
-          .waitFor();
+          .waitFor()
+          .catch(async (error) => {
+            console.log(
+              "Portal failure state:",
+              await page.locator("body").innerText(),
+            );
+            throw error;
+          });
         assert.equal(
           await page
             .getByRole("link", { name: "User access", exact: true })

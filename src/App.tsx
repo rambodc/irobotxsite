@@ -652,7 +652,17 @@ export function ContactForm({
     }
   }
   return (
-    <form className="contact-form panel" onSubmit={submit}>
+    <form
+      className="contact-form panel"
+      onSubmit={submit}
+      onChange={() => {
+        if (failed) {
+          setRequestId(crypto.randomUUID());
+          setFailed(false);
+          setResult("");
+        }
+      }}
+    >
       <h3>Start a conversation.</h3>
       <div className="form-row">
         <label>

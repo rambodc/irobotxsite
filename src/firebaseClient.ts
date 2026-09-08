@@ -1,7 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, connectAuthEmulator } from "firebase/auth";
 import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
-import { initializeAppCheck, ReCaptchaEnterpriseProvider } from "firebase/app-check";
+import { getToken, initializeAppCheck, ReCaptchaEnterpriseProvider } from "firebase/app-check";
 const app = initializeApp({
   apiKey: "AIzaSyAO1jsdnwbpOqhcNSLfRGoCLNBJIvFYBi0",
   authDomain: "irobotxsite.firebaseapp.com",
@@ -23,6 +23,23 @@ export const appCheck =
         isTokenAutoRefreshEnabled: true,
       })
     : undefined;
+export async function verifyBrowser() {
+  if (!appCheck) return;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      getToken(appCheck),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(Object.assign(
+          new Error("Browser verification timed out"),
+          { code: "appCheck/timeout" },
+        )), 15000);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
 export const auth = getAuth(app);
 export const functions = getFunctions(app, "us-central1");
 if (import.meta.env.VITE_EMULATORS === "true") {

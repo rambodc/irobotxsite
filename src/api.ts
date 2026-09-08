@@ -1,6 +1,5 @@
 import { httpsCallable } from "firebase/functions";
-import { getToken } from "firebase/app-check";
-import { functions, appCheck } from "./firebaseClient";
+import { functions, verifyBrowser } from "./firebaseClient";
 export type AppId = "oil-gas" | "robotics" | "fintech";
 export interface Profile {
   uid: string;
@@ -24,7 +23,7 @@ export interface ContactInput {
 export type Delivery = { delivery: "sent" | "failed" | "pending"; id?: string };
 const call = async <I, O>(name: string, input: I) => {
   // Surface verification failures before attempting a protected operation.
-  if (appCheck) await getToken(appCheck);
+  await verifyBrowser();
   return (await httpsCallable<I, O>(functions, name)(input)).data;
 };
 export const api = {

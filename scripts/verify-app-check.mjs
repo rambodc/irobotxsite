@@ -1,4 +1,4 @@
-import { chromium } from '@playwright/test';
+import { chromium, expect } from '@playwright/test';
 import assert from 'node:assert/strict';
 
 // Run against a deployed build. Does not send email or print bearer tokens.
@@ -33,6 +33,19 @@ try {
   assert.equal(valid.status, 400, 'Verified contact request must reach input validation');
   assert.equal(valid.body.error.status, 'INVALID_ARGUMENT');
   console.log('Verified contact request reached validation without sending email.');
+  const blocked = await browser.newPage();
+  await blocked.route('**/recaptcha/enterprise.js*', route => route.abort());
+  let blockedCalls = 0;
+  blocked.on('request', request => {
+    if (request.url() === root + 'requestPasswordReset') blockedCalls++;
+  });
+  await blocked.goto(site + '/forgot-password');
+  await blocked.getByRole('textbox', { name: 'Email address' }).fill('appcheck-blocked@example.invalid');
+  await blocked.getByRole('button', { name: 'Send reset instructions' }).click();
+  await expect(blocked.getByRole('alert')).toContainText('Browser verification could not complete', {timeout:60000});
+  assert.equal(blockedCalls, 0, 'Failed verification must not attempt email delivery');
+  await blocked.close();
+  console.log('Blocked reCAPTCHA displays a useful retry message and sends no callable request.');
   if (enforced) {
     for (const name of names) {
       for (const token of [undefined, 'invalid-token']) {

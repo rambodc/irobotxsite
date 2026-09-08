@@ -4,14 +4,16 @@ for (const viewport of [
   { width: 390, height: 844 },
 ]) {
   test(`Public pages work at ${viewport.width}px`, async ({ page }) => {
+    test.setTimeout(60000);
     await page.setViewportSize(viewport);
+    await page.emulateMedia({ reducedMotion: "reduce" });
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     for (const [route, heading] of [
-      ["/", "Intelligence"],
-      ["/about", "Curiosity"],
-      ["/demo", "A window"],
-      ["/contact", "Great work"],
+      ["/", "AI-powered software"],
+      ["/about", "Technology that understands"],
+      ["/demo", "See what we could build"],
+      ["/contact", "Your operation."],
     ]) {
       await page.goto(route);
       await expect(page.locator("h1")).toContainText(heading);
@@ -20,6 +22,17 @@ for (const viewport of [
           () => document.documentElement.scrollWidth <= innerWidth,
         ),
       ).toBe(true);
+      for (const img of await page.locator("picture img").all()) {
+        await img.scrollIntoViewIfNeeded();
+        await expect
+          .poll(() =>
+            img.evaluate(
+              (el: HTMLImageElement) => el.complete && el.naturalWidth > 0,
+            ),
+          )
+          .toBe(true);
+      }
+      await page.evaluate(() => scrollTo(0, 0));
       await page.screenshot({
         path: `test-results/${viewport.width}-${route.replace("/", "") || "home"}.png`,
         fullPage: true,
@@ -60,11 +73,15 @@ test("reduced motion and unavailable WebGL preserve content", async ({
   });
   await page.goto("/demo");
   await expect(
-    page.getByLabel("Conceptual connected industrial system"),
+    page.getByRole("region", { name: "Oil & Gas visual concepts" }),
   ).toBeVisible();
+  await expect(page.locator(".concept-card")).toHaveCount(3);
+  await expect(page.getByText("Coming soon", { exact: true })).toHaveCount(2);
+  await expect(page.locator("canvas")).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Reduced motion enabled" }),
-  ).toBeDisabled();
+    page.getByRole("button", { name: /motion|rotate/i }),
+  ).toHaveCount(0);
+  await expect(page.getByText(/These are illustrative concepts/)).toBeVisible();
   await expect(page.locator("h1")).toBeVisible();
 });
 test("invalid invitation and contact validation are usable", async ({
@@ -82,4 +99,31 @@ test("invalid invitation and contact validation are usable", async ({
       .locator('input[name="name"]')
       .evaluate((e: HTMLInputElement) => e.validity.valueMissing),
   ).toBe(true);
+});
+
+test("About anchors, primary call to action and brand assets work", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/");
+  await page
+    .getByRole("link", { name: "Discuss your project" })
+    .first()
+    .click();
+  await expect(page).toHaveURL(/\/contact$/);
+  for (const id of ["oil-gas", "robotics", "fintech"]) {
+    await page.goto("/about#" + id);
+    await expect(page.locator("#" + id)).toBeVisible();
+  }
+  for (const path of [
+    "/favicon.svg",
+    "/favicon.ico",
+    "/apple-touch-icon.png",
+    "/brand/ix-blue.svg",
+    "/og.png",
+  ]) {
+    const response = await request.get(path);
+    expect(response.ok()).toBe(true);
+    expect(response.headers()["content-type"]).toMatch(/image/);
+  }
 });

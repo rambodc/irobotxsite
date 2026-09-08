@@ -1,0 +1,32 @@
+[
+  {
+    "name": "oilfield",
+    "prompt": "Use case: stylized-concept. Asset type: premium iRobotX website image, landscape 1536x1024. Cinematic industrial technology campaign, realistic materials, deep midnight navy, electric blue and icy cyan illumination, restrained white highlights, rich contrast, precise beautiful detail, sophisticated enterprise art direction. No text, no letters, no logos, no watermarks, no charts with labels. Entire scene coherent and elegant rather than cluttered. A spectacular wide aerial view of a contemporary Canadian onshore oil and gas field at blue hour, a drilling derrick, well pads, roads and modest production facilities across a vast landscape. Fine electric blue lines subtly connect the actual assets across the ground, suggesting unified operational intelligence. Low horizon, powerful cinematic depth and atmospheric blue haze. No futuristic skyscrapers. Main installation center-right, dark sky and left side give breathing room.",
+    "source": "oilfield.png"
+  },
+  {
+    "name": "well",
+    "prompt": "Use case: stylized-concept. Asset type: premium iRobotX website image, landscape 1536x1024. Cinematic industrial technology campaign, realistic materials, deep midnight navy, electric blue and icy cyan illumination, restrained white highlights, rich contrast, precise beautiful detail, sophisticated enterprise art direction. No text, no letters, no logos, no watermarks, no charts with labels. Entire scene coherent and elegant rather than cluttered. A premium three-quarter perspective geological cutaway of one oil and gas well: a small realistic surface wellhead and pad at top, a vertical cased bore descending deep through layered strata and smoothly curving into a horizontal lateral inside a reservoir. Elegant blue illumination traces the bore. Clearly layered earth slab suspended against midnight navy. This is conceptual industrial artwork, not an engineering diagram. No multiple disconnected pipes, no extra random tunnels, no written labels.",
+    "source": "well.png"
+  },
+  {
+    "name": "operations",
+    "prompt": "Use case: stylized-concept. Asset type: premium iRobotX website image, landscape 1536x1024. Cinematic industrial technology campaign, realistic materials, deep midnight navy, electric blue and icy cyan illumination, restrained white highlights, rich contrast, precise beautiful detail, sophisticated enterprise art direction. No text, no letters, no logos, no watermarks, no charts with labels. Entire scene coherent and elegant rather than cluttered. A cinematic bird's-eye connected industrial ecosystem: several realistic well pads and production equipment, one drilling rig, a small operations building and service vehicles linked by delicate electric-blue pathways across an expansive dark terrain. Show one integrated system with human scale and realistic proportions. Sophisticated holographic data connections above actual facilities, understated not a video-game city. No text or UI windows.",
+    "source": "operations.png"
+  },
+  {
+    "name": "ai",
+    "prompt": "Use case: stylized-concept. Asset type: premium iRobotX website image, landscape 1536x1024. Cinematic industrial technology campaign, realistic materials, deep midnight navy, electric blue and icy cyan illumination, restrained white highlights, rich contrast, precise beautiful detail, sophisticated enterprise art direction. No text, no letters, no logos, no watermarks, no charts with labels. Entire scene coherent and elegant rather than cluttered. A striking abstract operational intelligence visual grounded in an oilfield: a luminous blue layered glass intelligence core at the center, thin purposeful paths linking it to a finely detailed miniature wellhead, industrial production vessels and a reservoir contour terrain. Floating translucent planes suggest contextual data without any written labels, numbers, charts, or interface text. Elegant spatial composition, lots of dark breathing room, polished cobalt glass and metal.",
+    "source": "ai.png"
+  },
+  {
+    "name": "robotics",
+    "prompt": "Use case: stylized-concept. Asset type: premium iRobotX website image, landscape 1536x1024. Cinematic industrial technology campaign, realistic materials, deep midnight navy, electric blue and icy cyan illumination, restrained white highlights, rich contrast, precise beautiful detail, sophisticated enterprise art direction. No text, no letters, no logos, no watermarks, no charts with labels. Entire scene coherent and elegant rather than cluttered. A sophisticated industrial humanoid robot in three-quarter profile, torso and articulated hand clearly visible in a modern manufacturing research facility. Brushed titanium, dark graphite structural components, subtle electric blue light, meticulously believable precision joints. Background a softly focused industrial robotic arm. Confident calm engineering, not a combat robot, no weapon, no human skin, no logos. Cinematic blue rim light and deep navy shadows.",
+    "source": "robotics.png"
+  },
+  {
+    "name": "fintech",
+    "prompt": "Use case: stylized-concept. Asset type: premium iRobotX website image, landscape 1536x1024. Cinematic industrial technology campaign, realistic materials, deep midnight navy, electric blue and icy cyan illumination, restrained white highlights, rich contrast, precise beautiful detail, sophisticated enterprise art direction. No text, no letters, no logos, no watermarks, no charts with labels. Entire scene coherent and elegant rather than cluttered. An elegant visual metaphor for banking interoperability: three sculptural institutional banking structures represented by refined glass-and-metal column forms linked by flowing electric-blue channels and luminous small data blocks across a dark architectural plane. Distributed financial infrastructure, clean geometry, cobalt glass and silver, sophisticated not cryptocurrency hype. No coins, currency symbols, bank logos, lettering, or text. Deep cinematic perspective, precise blue-white light.",
+    "source": "fintech.png"
+  }
+]

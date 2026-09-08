@@ -25,7 +25,7 @@ Set `VITE_EMULATORS=true` in `.env.local` to use local Auth/Functions. Integrati
 
 Public pages: `/`, `/about`, `/demo`, `/contact`. Authentication: `/signin`, `/forgot-password`, `/accept-invite`, `/auth/action`. Private workspace: `/portal`, `/portal/account`, `/portal/contact`, `/portal/admin`.
 
-Edit company text, industries and demo definitions in `src/content.ts`. Layout and public copy are in `src/App.tsx`; blue theme tokens and responsive rules are in `src/styles.css`. `src/Scene.tsx` contains the lightweight industrial 3D scene, reduced motion support and no-WebGL fallback. The demo is illustrative only; no engineering calculations, operational data or full industry applications are included. Public route metadata is emitted by `scripts/page-metadata.mjs`; update it when changing page positioning.
+Edit public-page copy, industries, concept definitions, image descriptions and page metadata in `src/content.ts`. Layout is in `src/App.tsx`; blue theme tokens and responsive rules are in `src/styles.css`. The site uses static cinematic images and reduced-motion-aware reveals; it does not load Three.js or require WebGL. The demo is illustrative only; no engineering calculations, operational data or full industry applications are included. Public route metadata is emitted by `scripts/page-metadata.mjs`; update it when changing page positioning.
 
 ## Accounts and application access
 
@@ -88,3 +88,11 @@ All eight callable Functions enforce App Check in production (`enforceAppCheck: 
 For the complete live invitation/sign-in/account smoke test, run `node scripts/verify-app-check-account.mjs` with an authorized gcloud login. It creates a temporary member account, exercises real password setup and account updates in a browser, and deletes the account/profile in a finally block. No invitation email is sent and no passwords, action codes, or tokens are printed. Client verification has a 15-second timeout so blocked reCAPTCHA cannot leave forms waiting indefinitely.
 
 If legitimate traffic is blocked, first inspect App Check metrics and the allowed-domain list. An emergency backend rollback can set Functions enforcement off in a reviewed release; Auth/Firestore enforcement can be changed to monitoring in the Firebase console. Keep the App Check-enabled frontend when rolling back another feature, or disable the corresponding enforcement before restoring a pre-App-Check build.
+
+## Imagery and iX branding
+
+Six cinematic images were generated with the built-in image generation tool. Original artwork and the exact prompt set are in `assets/artwork/` and `assets/artwork/prompts.json`. Imagery is conceptual and does not depict a delivered customer system. `public/images/` contains responsive 640/1024/1536px AVIF and WebP exports. Run `npm run assets` after changing original artwork or the brand source. Image processing uses Sharp; generated output is committed and is not regenerated during deployment.
+
+`public/brand/` includes transparent blue, white and monochrome iX marks, horizontal lockups, square/circular versions, and PNG exports. `scripts/brand-assets.mjs` defines the shared SVG geometry. The same mark appears in public navigation/footer, authentication, the portal, the favicon and social card. Treat background marks as decorative; retain meaningful alternative text for the cinematic images.
+
+Home prioritizes custom Oil & Gas platforms and tailored AI integration. About preserves Oil & Gas, Robotics and FinTech anchors. Demo presents three labeled visual concepts with no live operational data or working AI. The private portal retains its stable application IDs and coming-soon status.

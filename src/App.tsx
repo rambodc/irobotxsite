@@ -10,18 +10,27 @@ import { motion, useReducedMotion } from "motion/react";
 import {
   ArrowUpRight,
   ArrowRight,
-  Cpu,
-  Layers3,
+  ArrowDown,
   Menu,
   X,
-  Workflow,
-  ShieldCheck,
-  Radio,
-  ChevronDown,
+  Sparkles,
+  Info,
 } from "lucide-react";
-import { company, industries, demos } from "./content";
+import {
+  company,
+  industries,
+  demos,
+  images,
+  home,
+  about,
+  concepts,
+  demoPage,
+  contact,
+  cta,
+  metadata,
+  type ImageId,
+} from "./content";
 import { api, errorMessage } from "./api";
-const Scene = lazy(() => import("./Scene"));
 const Portal = lazy(() => import("./Portal"));
 const publicPaths = ["/", "/about", "/demo", "/contact"];
 export function Link({
@@ -63,12 +72,22 @@ export function navigate(to: string) {
       100,
     );
 }
+export function Mark({ className = "" }: { className?: string }) {
+  return (
+    <img
+      className={`ix-mark ${className}`}
+      src="/brand/ix-blue.svg"
+      alt=""
+      aria-hidden="true"
+      width={80}
+      height={64}
+    />
+  );
+}
 export function Logo() {
   return (
     <span className="logo">
-      <span className="logo-symbol">
-        i<span>×</span>
-      </span>
+      <Mark />
       <span>
         iRobot<strong>X</strong>
       </span>
@@ -217,243 +236,218 @@ function Footer() {
     </footer>
   );
 }
-function SceneView({
-  interactive = false,
-  playing = true,
+function Art({
+  name,
+  priority = false,
+  className = "",
 }: {
-  interactive?: boolean;
-  playing?: boolean;
+  name: ImageId;
+  priority?: boolean;
+  className?: string;
 }) {
+  const asset = images[name];
   return (
-    <Suspense
-      fallback={<div className="scene-loading">Connecting the dots…</div>}
-    >
-      <Scene interactive={interactive} playing={playing} />
-    </Suspense>
+    <picture className={`cinematic-art art-${name} ${className}`}>
+      <source
+        type="image/avif"
+        srcSet={`/images/${asset.src}-640.avif 640w, /images/${asset.src}-1024.avif 1024w, /images/${asset.src}-1536.avif 1536w`}
+        sizes={priority ? "100vw" : "(max-width: 800px) 100vw, 60vw"}
+      />
+      <img
+        src={`/images/${asset.src}-1024.webp`}
+        srcSet={`/images/${asset.src}-640.webp 640w, /images/${asset.src}-1024.webp 1024w, /images/${asset.src}-1536.webp 1536w`}
+        sizes={priority ? "100vw" : "(max-width: 800px) 100vw, 60vw"}
+        alt={asset.alt}
+        width={1536}
+        height={1024}
+        loading={priority ? "eager" : "lazy"}
+        fetchPriority={priority ? "high" : "auto"}
+        decoding="async"
+      />
+    </picture>
   );
 }
 function CTA() {
   return (
     <section className="cta-band">
-      <div className="orbital" />
+      <Mark className="brand-watermark" />
       <Reveal>
-        <span className="eyebrow">
-          Your next challenge. Our next conversation.
-        </span>
-        <h2>
-          Let’s build something
-          <br />
-          <em>that moves you forward.</em>
-        </h2>
-        <p>Bring us the operation, the idea, or the problem worth solving.</p>
-        <Button>Talk to our team</Button>
+        <span className="eyebrow">{cta.eyebrow}</span>
+        <h2>{cta.title}</h2>
+        <p>{cta.text}</p>
+        <Button>{cta.button}</Button>
       </Reveal>
     </section>
   );
 }
+function Process() {
+  return (
+    <section className="content-section process-section">
+      <Reveal className="section-heading">
+        <div>
+          <span className="eyebrow">{home.process.eyebrow}</span>
+          <h2>{home.process.title}</h2>
+        </div>
+        <p>{home.process.text}</p>
+      </Reveal>
+      <div className="process-cards">
+        {home.process.steps.map((step, i) => (
+          <Reveal className="process-card" key={step.title}>
+            <span className="step-number">0{i + 1}</span>
+            <h3>{step.title}</h3>
+            <p>{step.text}</p>
+          </Reveal>
+        ))}
+      </div>
+    </section>
+  );
+}
+function Disciplines() {
+  return (
+    <section className="content-section disciplines-section">
+      <Reveal className="section-heading">
+        <div>
+          <span className="eyebrow">{home.disciplines.eyebrow}</span>
+          <h2>{home.disciplines.title}</h2>
+        </div>
+        <p>{home.disciplines.text}</p>
+      </Reveal>
+      <div className="discipline-grid">
+        {industries.slice(1).map((industry) => (
+          <Reveal className="discipline-card" key={industry.id}>
+            <div className="discipline-image">
+              <Art name={industry.image} />
+              <span className="image-label">
+                {industry.name} / Concept imagery
+              </span>
+            </div>
+            <div className="discipline-copy">
+              <span className="eyebrow">
+                {industry.number} / {industry.name}
+              </span>
+              <h3>{industry.title}</h3>
+              <p>{industry.text}</p>
+              <Link to={`/about#${industry.id}`} className="text-link">
+                Explore {industry.name}
+                <ArrowUpRight size={17} />
+              </Link>
+            </div>
+          </Reveal>
+        ))}
+      </div>
+    </section>
+  );
+}
 function Home() {
-  const reduce = useReducedMotion();
   return (
     <>
-      <section className="hero">
-        <div className="hero-grid" />
-        <div className="hero-glow" />
-        <div className="hero-inner">
-          <motion.div
-            className="hero-copy"
-            initial={reduce ? false : { opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7 }}
-          >
+      <section className="oil-hero">
+        <Art name="oilfield" priority />
+        <div className="oil-hero-shade" />
+        <Mark className="hero-watermark" />
+        <div className="oil-hero-content">
+          <Reveal>
             <span className="eyebrow">
-              <i className="signal" /> Technology for industries in motion
+              <i className="signal" />
+              {home.eyebrow}
             </span>
             <h1>
-              Intelligence
-              <br />
-              built for
-              <br />
-              <em>the field.</em>
+              AI-powered software for{" "}
+              <em>connected Oil &amp; Gas operations.</em>
             </h1>
             <p>{company.description}</p>
             <div className="button-row">
-              <Button to="/demo">Explore our technology</Button>
-              <Link className="text-link" to="/about">
-                Meet iRobotX <ArrowRight size={16} />
+              <Button>{home.primary}</Button>
+              <Link to="/demo" className="text-link">
+                {home.secondary}
+                <ArrowRight size={17} />
               </Link>
             </div>
-          </motion.div>
-          <div className="hero-visual">
-            <div className="scene-caption">
-              <span>
-                <i className="signal" /> INDUSTRIAL INTELLIGENCE
-              </span>
-              <span>iRX / 01</span>
-            </div>
-            <SceneView playing={!reduce} />
-            <div className="visual-label">
-              <span className="crosshair">+</span>
-              <div>
-                Complex systems.
-                <br />
-                <strong>Connected thinking.</strong>
-              </div>
-            </div>
-            <span className="concept-label">CONCEPT VISUALIZATION</span>
-          </div>
+          </Reveal>
         </div>
-        <div className="hero-base">
-          <span>THREE DISCIPLINES. ONE BUILDER’S MINDSET.</span>
+        <div className="oil-hero-bottom">
           <div>
-            <span>Oil & Gas</span>
-            <b>✳</b>
-            <span>Robotics</span>
-            <b>✳</b>
-            <span>FinTech</span>
+            {home.strip.map((item) => (
+              <span key={item}>{item}</span>
+            ))}
           </div>
-          <a href="#focus" aria-label="Explore our focus">
-            <ChevronDown size={20} />
+          <a href="#operations" aria-label="Explore connected operations">
+            <ArrowDown size={18} />
           </a>
         </div>
+        <span className="hero-art-note">Oil &amp; Gas / Concept imagery</span>
       </section>
-      <section id="focus" className="section intro">
-        <Reveal>
-          <span className="eyebrow">Built around real-world complexity</span>
-          <h2>
-            The field is complex.
-            <br />
-            <em>
-              Your technology
-              <br />
-              should bring clarity.
-            </em>
-          </h2>
-        </Reveal>
-        <Reveal className="intro-right">
-          <p className="large-copy">
-            We connect deep technical thinking with the realities of industrial
-            operations.
-          </p>
-          <p>
-            From software that brings information together to automation that
-            connects the physical and digital, our work starts with
-            understanding the problem—and building a practical way forward.
-          </p>
-          <Link className="text-link" to="/about">
-            Discover our approach <ArrowUpRight size={18} />
-          </Link>
-        </Reveal>
-      </section>
-      <section className="section-wide">
-        <div className="section-heading">
+      <section id="operations" className="content-section operations-section">
+        <Reveal className="section-heading">
           <div>
-            <span className="eyebrow">Where we focus</span>
-            <h2>
-              Technology with
-              <br />
-              <em>an industrial edge.</em>
-            </h2>
+            <span className="eyebrow">{home.operations.eyebrow}</span>
+            <h2>{home.operations.title}</h2>
           </div>
-          <p>
-            Oil & Gas at the core.
-            <br />
-            Ideas that travel across industries.
-          </p>
-        </div>
-        <div className="industry-grid">
-          {industries.map((industry, i) => (
-            <Reveal key={industry.id} className={`industry-card industry-${i}`}>
-              <div className="card-top">
-                <span>
-                  {industry.number} / {industry.name}
-                </span>
-                {i === 0 ? <Workflow /> : i === 1 ? <Cpu /> : <Layers3 />}
-              </div>
-              <div className="industry-art" aria-hidden="true">
-                {i === 0 ? (
-                  <>
-                    <i />
-                    <i />
-                    <i />
-                    <span />
-                  </>
-                ) : i === 1 ? (
-                  <div className="chip">
-                    <Cpu size={70} />
-                  </div>
-                ) : (
-                  <div className="stack">
-                    <Layers3 size={90} />
-                  </div>
-                )}
-              </div>
-              <h3>{industry.title}</h3>
-              <p>{industry.text}</p>
-              <Link to={`/about#${industry.id}`} className="card-link">
-                Explore {industry.name}
-                <ArrowUpRight size={20} />
-              </Link>
+          <p>{home.operations.text}</p>
+        </Reveal>
+        <Reveal className="operations-showcase">
+          <Art name="operations" />
+          <div className="concept-panel">
+            <span className="eyebrow">A shared operational workspace</span>
+            <Mark />
+            <div className="concept-connections">
+              {home.strip.map((item, i) => (
+                <div key={item}>
+                  <span>0{i + 1}</span>
+                  {item}
+                  <ArrowUpRight size={14} />
+                </div>
+              ))}
+            </div>
+            <span className="concept-disclosure">
+              Illustrative platform concept
+            </span>
+          </div>
+        </Reveal>
+        <div className="capability-grid">
+          {home.operations.points.map((item, i) => (
+            <Reveal className="capability" key={item.title}>
+              <span className="eyebrow">0{i + 1}</span>
+              <h3>{item.title}</h3>
+              <p>{item.text}</p>
             </Reveal>
           ))}
         </div>
       </section>
-      <section className="section process">
-        <Reveal className="process-visual">
-          <div className="orbit-rings">
-            <i />
-            <i />
-            <i />
-          </div>
-          <div className="process-core">
-            <Logo />
-            <small>IDEA → REALITY</small>
-          </div>
-          <span className="process-node node-one">
-            <Radio size={16} /> Understand
-          </span>
-          <span className="process-node node-two">
-            <Workflow size={16} /> Connect
-          </span>
-          <span className="process-node node-three">
-            <ShieldCheck size={16} /> Engineer
-          </span>
-        </Reveal>
-        <Reveal>
-          <span className="eyebrow">Our way of working</span>
-          <h2>
-            Start with the problem.
-            <br />
-            <em>Build what matters.</em>
-          </h2>
-          <p>
-            Useful technology comes from staying close to the people, systems,
-            and environments it serves.
-          </p>
-          <ol className="steps">
-            <li>
-              <b>01</b>
-              <div>
-                <h3>Understand the operation</h3>
-                <p>Work from the real context, constraints, and goals.</p>
-              </div>
-            </li>
-            <li>
-              <b>02</b>
-              <div>
-                <h3>Connect the disciplines</h3>
-                <p>Bring software, data, and intelligent systems together.</p>
-              </div>
-            </li>
-            <li>
-              <b>03</b>
-              <div>
-                <h3>Develop and refine</h3>
-                <p>Prototype, learn, and engineer the next iteration.</p>
-              </div>
-            </li>
-          </ol>
-        </Reveal>
+      <section className="ai-band">
+        <div className="content-section split-feature">
+          <Reveal className="feature-copy">
+            <span className="eyebrow">{home.ai.eyebrow}</span>
+            <h2>{home.ai.title}</h2>
+            <p>{home.ai.text}</p>
+            <ul className="capability-list">
+              {home.ai.points.map((item) => (
+                <li key={item}>
+                  <Sparkles size={15} />
+                  {item}
+                </li>
+              ))}
+            </ul>
+            <Link to="/demo#ai-workspace" className="text-link">
+              Explore the AI concept
+              <ArrowUpRight size={17} />
+            </Link>
+          </Reveal>
+          <Reveal className="ai-visual">
+            <Art name="ai" />
+            <div className="ai-example">
+              <span className="eyebrow">
+                <Mark />
+                Your data. Your questions.
+              </span>
+              <blockquote>{home.ai.example}</blockquote>
+              <p>{home.ai.caption}</p>
+            </div>
+          </Reveal>
+        </div>
       </section>
+      <Process />
+      <Disciplines />
       <CTA />
     </>
   );
@@ -461,144 +455,120 @@ function Home() {
 function About() {
   return (
     <>
-      <section className="page-hero">
-        <span className="eyebrow">About iRobotX</span>
-        <h1>
-          Curiosity connects us.
-          <br />
-          <em>Engineering moves us.</em>
-        </h1>
-        <p>
-          A Calgary technology company developing software and intelligent
-          systems across Oil & Gas, Robotics, and FinTech.
-        </p>
+      <section className="page-hero brand-page-hero">
+        <Mark className="page-watermark" />
+        <span className="eyebrow">{about.eyebrow}</span>
+        <h1>{about.title}</h1>
+        <p>{about.intro}</p>
       </section>
-      <section className="section intro">
+      <section className="content-section about-intro">
         <Reveal>
-          <span className="eyebrow">One company. Connected disciplines.</span>
-          <h2>
-            Built to explore.
-            <br />
-            <em>Driven to make.</em>
-          </h2>
+          <span className="eyebrow">{about.eyebrow2}</span>
+          <h2>{about.heading}</h2>
         </Reveal>
-        <Reveal className="intro-right">
-          <p className="large-copy">
-            Good ideas rarely stay inside one industry.
-          </p>
-          <p>
-            Our work brings together physical systems and digital technology. An
-            industrial challenge can lead to an automation idea. A robotics
-            problem can inform a software platform. Each discipline adds another
-            perspective.
-          </p>
-          <p>
-            Oil & Gas is central to that work: complex environments where
-            context, integration, and practical engineering matter.
-          </p>
+        <Reveal>
+          {about.paragraphs.map((p) => (
+            <p key={p}>{p}</p>
+          ))}
         </Reveal>
       </section>
-      {industries.map((industry, i) => (
+      {industries.map((industry) => (
         <section
-          id={industry.id}
           key={industry.id}
-          className="section industry-detail"
+          id={industry.id}
+          className={`content-section about-industry ${industry.id === "oil-gas" ? "about-primary" : ""}`}
         >
-          <Reveal>
+          <Reveal className="about-industry-art">
+            <Art name={industry.image} />
+            <span className="image-label">
+              {industry.name} / Illustrative concept
+            </span>
+          </Reveal>
+          <Reveal className="about-industry-copy">
             <span className="eyebrow">
               {industry.number} / {industry.name}
             </span>
             <h2>{industry.title}</h2>
             <p>{industry.text}</p>
+            <p>{industry.detail}</p>
             <div className="tags">
               {industry.tags.map((tag) => (
                 <span key={tag}>{tag}</span>
               ))}
             </div>
           </Reveal>
-          <Reveal className="detail-art">
-            {i === 0 ? (
-              <SceneView playing={false} />
-            ) : (
-              <div className="detail-icon">
-                {i === 1 ? <Cpu /> : <Layers3 />}
-                <span>
-                  {industry.name.toUpperCase()} / RESEARCH & DEVELOPMENT
-                </span>
-              </div>
-            )}
-          </Reveal>
         </section>
       ))}
+      <Process />
       <CTA />
     </>
   );
 }
 function Demo() {
-  const reduce = useReducedMotion();
-  const [playing, setPlaying] = useState(false);
   return (
     <>
-      <section className="page-hero compact">
-        <span className="eyebrow">The demonstration space</span>
-        <h1>
-          A window into
-          <br />
-          <em>what comes next.</em>
-        </h1>
-        <p>
-          A place to explore ideas, try concepts, and see our technology take
-          shape. This is just the beginning.
-        </p>
+      <section className="page-hero brand-page-hero">
+        <Mark className="page-watermark" />
+        <span className="eyebrow">{demoPage.eyebrow}</span>
+        <h1>{demoPage.title}</h1>
+        <p>{demoPage.intro}</p>
       </section>
-      <section className="section-wide demo-section">
-        <div className="demo-workspace">
-          <div className="workspace-bar">
-            <span>
-              <i className="signal" /> Connected industrial systems
-            </span>
-            <span className="badge">Interactive concept</span>
-          </div>
-          <div className="demo-canvas">
-            <SceneView interactive playing={playing && !reduce} />
-            <div className="demo-overlay">
-              <span className="eyebrow">01 / Oil & Gas</span>
-              <h2>
-                A different perspective
-                <br />
-                on connected operations.
-              </h2>
-            </div>
-          </div>
-          <div className="workspace-bottom">
-            <span>Drag to rotate · Scroll to zoom · Sample geometry only</span>
-            <button
-              className="small-button"
-              disabled={Boolean(reduce)}
-              onClick={() => setPlaying(!playing)}
-            >
-              {reduce
-                ? "Reduced motion enabled"
-                : playing
-                  ? "Pause motion"
-                  : "Enable motion"}
-            </button>
-          </div>
+      <div className="gallery-note">
+        <Info size={18} />
+        <p>{demoPage.disclosure}</p>
+      </div>
+      <section
+        className="content-section concept-gallery"
+        aria-label="Oil & Gas visual concepts"
+      >
+        {concepts.map((concept) => (
+          <Reveal key={concept.id} className="concept-card">
+            <article id={concept.id}>
+              <div className="concept-art">
+                <Art name={concept.image} />
+                <div className="concept-art-top">
+                  <span>
+                    {concept.number} / {concept.category}
+                  </span>
+                  <span className="badge">Visual concept</span>
+                </div>
+                {concept.id === "ai-workspace" && (
+                  <div className="gallery-ai-question">
+                    <Mark />
+                    <span>{home.ai.example}</span>
+                  </div>
+                )}
+              </div>
+              <div className="concept-copy">
+                <div>
+                  <span className="eyebrow">{concept.category}</span>
+                  <h2>{concept.name}</h2>
+                </div>
+                <div>
+                  <p>{concept.text}</p>
+                  <div className="tags">
+                    {concept.tags.map((tag) => (
+                      <span key={tag}>{tag}</span>
+                    ))}
+                  </div>
+                  <span className="concept-disclosure">{concept.note}</span>
+                </div>
+              </div>
+            </article>
+          </Reveal>
+        ))}
+        <div className="future-heading">
+          <span className="eyebrow">Robotics &amp; FinTech</span>
+          <h2>{demoPage.future}</h2>
         </div>
-        <div className="demo-note">
-          <Radio size={18} />
-          <p>
-            This is an illustrative 3D concept, not live operational data or an
-            engineering simulation. More demonstrations will be added here.
-          </p>
-        </div>
-        <div className="demo-cards">
-          {demos.map((demo) => (
-            <article className="panel" key={demo.id}>
+        <div className="future-grid">
+          {demos.slice(1).map((demo) => (
+            <article className="panel future-card" key={demo.id}>
+              <Mark />
+              <span className="badge muted">Coming soon</span>
               <span className="eyebrow">{demo.category}</span>
               <h3>{demo.name}</h3>
               <p>{demo.text}</p>
-              <span className="badge muted">Coming soon</span>
             </article>
           ))}
         </div>
@@ -607,6 +577,7 @@ function Demo() {
     </>
   );
 }
+
 export function ContactForm({
   prefill,
 }: {
@@ -745,36 +716,28 @@ export function ContactForm({
 function Contact() {
   return (
     <>
-      <section className="page-hero compact">
-        <span className="eyebrow">Let’s connect</span>
-        <h1>
-          Great work starts
-          <br />
-          <em>with a conversation.</em>
-        </h1>
-        <p>
-          Tell us what you’re working on. We’d like to hear where technology
-          could make a difference.
-        </p>
+      <section className="page-hero brand-page-hero">
+        <Mark className="page-watermark" />
+        <span className="eyebrow">{contact.eyebrow}</span>
+        <h1>{contact.title}</h1>
+        <p>{contact.intro}</p>
       </section>
       <section className="section contact-layout">
         <div>
           <span className="eyebrow">A direct connection</span>
-          <h2>
-            Your next idea.
-            <br />
-            Our next challenge.
-          </h2>
+          <h2>{contact.heading}</h2>
+          <p>{contact.text}</p>
           <a className="email-link" href={`mailto:${company.email}`}>
             {company.email}
             <ArrowUpRight size={21} />
           </a>
-          <p>Calgary, Alberta, Canada</p>
-          <div className="contact-coordinate">
-            <span>51.0447° N / 114.0719° W</span>
-            <div className="coordinate-orbit" />
+          <p>{company.location}, Canada</p>
+          <div className="contact-brand">
+            <Mark />
             <span>
-              <i className="signal" /> OPEN TO NEW POSSIBILITIES
+              Connected thinking.
+              <br />
+              Built around you.
             </span>
           </div>
         </div>
@@ -791,13 +754,24 @@ export default function App() {
     return () => window.removeEventListener("popstate", update);
   }, []);
   useEffect(() => {
-    const names: Record<string, string> = {
-      "/": "Intelligence built for the field",
-      "/about": "About us",
-      "/demo": "Technology demos",
-      "/contact": "Contact",
-    };
-    document.title = `${names[path] || "Client portal"} | iRobotX`;
+    const page = metadata[path as keyof typeof metadata];
+    document.title = page?.title || "Client portal | iRobotX";
+    for (const [selector, value] of [
+      [
+        'meta[name="description"]',
+        page?.description || "Your private iRobotX workspace.",
+      ],
+      ['meta[property="og:title"]', document.title],
+      [
+        'meta[property="og:description"]',
+        page?.description || "Your private iRobotX workspace.",
+      ],
+      [
+        'meta[property="og:url"]',
+        `https://irobotx.io${path === "/" ? "/" : path}`,
+      ],
+    ])
+      document.querySelector(selector)?.setAttribute("content", value);
     document
       .querySelector('link[rel="canonical"]')
       ?.setAttribute("href", `https://irobotx.io${path === "/" ? "" : path}`);

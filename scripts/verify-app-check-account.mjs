@@ -13,7 +13,8 @@ const auth = getAuth();
 const site = process.env.SITE_URL || 'https://irobotx.io';
 const headers = {Authorization:`Bearer ${token}`,'x-goog-user-project':'irobotxsite','Content-Type':'application/json'};
 const documents = 'https://firestore.googleapis.com/v1/projects/irobotxsite/databases/(default)/documents/users/';
-const password = randomBytes(24).toString('base64url');
+// Exercise the minimum-length policy using letters only. Never log credentials.
+const password = randomBytes(6).map(byte => 97 + byte % 26).toString('ascii');
 let uid;
 const browser = await chromium.launch();
 try {

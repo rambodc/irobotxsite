@@ -64,7 +64,7 @@ export function errorMessage(error: unknown): string {
   if (/already-exists/.test(code))
     return "This user already has an account. Manage them in the user list.";
   if (/invalid-argument|weak-password/.test(code))
-    return "Please check your details. Passwords must contain at least 12 characters.";
+    return "Please check your details. Passwords must contain at least 6 characters.";
   if (/failed-precondition/.test(code))
     return "This action is unavailable for the account’s current state. The last active administrator must remain enabled.";
   return "We could not complete that request. Please try again.";

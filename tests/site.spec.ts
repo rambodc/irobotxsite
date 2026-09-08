@@ -114,14 +114,13 @@ test("About anchors, primary call to action and brand assets work", async ({
   for (const id of ["oil-gas", "robotics", "fintech"]) {
     await page.goto("/about#" + id);
     await expect(page.locator("#" + id)).toBeVisible();
+    // Wait for fragment scrolling to finish before changing the next hash.
     await expect
-      .poll(() =>
-        page.locator("#" + id).evaluate((el) => {
-          const top = el.getBoundingClientRect().top;
-          return top >= 0 && top < 180;
-        }),
+      .poll(
+        () => page.locator("#" + id).evaluate(el => Math.round(el.getBoundingClientRect().top)),
+        { message: `Section ${id} should align below navigation` },
       )
-      .toBe(true);
+      .toBe(110);
   }
   for (const path of [
     "/favicon.svg",

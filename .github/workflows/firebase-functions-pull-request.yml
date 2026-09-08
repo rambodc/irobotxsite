@@ -12,8 +12,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - id: changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          VALIDATION: 'true'
+        run: node scripts/change-scope.mjs
+      - run: node --test tests/change-scope.test.mjs
       - uses: actions/setup-node@v4
+        if: steps.changes.outputs.functions == 'true'
         with: { node-version: 22, cache: npm }
       - run: npm ci
+        if: steps.changes.outputs.functions == 'true'
       - run: npm ci --prefix functions
+        if: steps.changes.outputs.functions == 'true'
       - run: npm run lint --prefix functions && npm test --prefix functions
+        if: steps.changes.outputs.functions == 'true'

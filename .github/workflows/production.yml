@@ -3,17 +3,43 @@ on:
   push:
     branches: [production]
   workflow_dispatch:
+    inputs:
+      scope:
+        description: Component to redeploy (use all to recover a failed mixed release)
+        type: choice
+        options: [hosting, functions, rules, all]
+        default: hosting
 permissions: { contents: read, id-token: write }
 concurrency: { group: irobotx-production, cancel-in-progress: false }
 jobs:
+  changes:
+    if: github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    outputs:
+      hosting: ${{ steps.scope.outputs.hosting }}
+      functions: ${{ steps.scope.outputs.functions }}
+      rules: ${{ steps.scope.outputs.rules }}
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - id: scope
+        env:
+          BASE_SHA: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+          DEPLOY_SCOPE: ${{ inputs.scope || 'auto' }}
+        run: node scripts/change-scope.mjs
   rules:
+    needs: changes
+    if: needs.changes.outputs.rules == 'true'
     uses: ./.github/workflows/firebase-rules-merge.yml
     secrets: inherit
   functions:
-    needs: rules
+    needs: [changes, rules]
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.functions == 'true' && (needs.rules.result == 'success' || needs.rules.result == 'skipped') }}
     uses: ./.github/workflows/firebase-functions-merge.yml
     secrets: inherit
   hosting:
-    needs: functions
+    needs: [changes, rules, functions]
+    if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.hosting == 'true' && (needs.rules.result == 'success' || needs.rules.result == 'skipped') && (needs.functions.result == 'success' || needs.functions.result == 'skipped') }}
     uses: ./.github/workflows/firebase-hosting-merge.yml
     secrets: inherit

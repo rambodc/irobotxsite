@@ -65,10 +65,10 @@ export function navigate(to: string) {
   if (url.origin !== location.origin) return;
   history.pushState({}, "", url.pathname + url.search + url.hash);
   dispatchEvent(new PopStateEvent("popstate"));
-  window.scrollTo(0, 0);
+  window.scrollTo({ top: 0, behavior: "instant" });
   if (url.hash)
     setTimeout(
-      () => document.getElementById(url.hash.slice(1))?.scrollIntoView(),
+      () => document.getElementById(url.hash.slice(1))?.scrollIntoView({ behavior: "instant" }),
       100,
     );
 }
@@ -758,7 +758,7 @@ export default function App() {
     }
     if (!id) return;
     const frame = requestAnimationFrame(() => {
-      document.getElementById(id)?.scrollIntoView();
+      document.getElementById(id)?.scrollIntoView({ behavior: "instant" });
     });
     return () => cancelAnimationFrame(frame);
   }, [path]);

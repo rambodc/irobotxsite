@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { auth, verifyBrowser } from "./firebaseClient";
 import { api, errorMessage, type Profile, type AppId } from "./api";
-import { ContactForm, Link, Logo, navigate } from "./App";
+import { ContactForm, Link, Logo, Mark, navigate } from "./App";
 import { demos } from "./content";
 function AuthPage({ path }: { path: string }) {
   const action = path === "/accept-invite" || path === "/auth/action";
@@ -33,7 +33,8 @@ function AuthPage({ path }: { path: string }) {
   const code = new URLSearchParams(location.search).get("oobCode") || "";
   useEffect(() => {
     if (action) {
-      verifyBrowser().then(() => verifyPasswordResetCode(auth, code))
+      verifyBrowser()
+        .then(() => verifyPasswordResetCode(auth, code))
         .then((email) => {
           setEmail(email);
           setValid(true);
@@ -84,7 +85,7 @@ function AuthPage({ path }: { path: string }) {
         <ArrowLeft size={16} /> Back to iRobotX
       </Link>
       <div className="auth-decoration">
-        <div className="orbital" />
+        <Mark className="auth-brand-mark" />
         <span>
           CONNECTED THINKING.
           <br />

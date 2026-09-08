@@ -1,0 +1,23 @@
+name: "Production: Firebase Hosting"
+on:
+  workflow_call:
+  workflow_dispatch:
+permissions: { contents: read, id-token: write }
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    environment: Prod
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run lint && npm run build && npm test
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+      - run: npm install --global firebase-tools@14.15.2
+      - run: firebase deploy --only hosting --project irobotxsite --non-interactive

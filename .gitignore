@@ -1,4 +1,12 @@
+node_modules/
+dist/
+.env*
+!.env.example
 .firebase/
-firebase-debug.log
-firebase-debug.*.log
-.DS_Store
+*-debug.log*
+.secret*
+credentials*.json
+test-results/
+playwright-report/
+*.tsbuildinfo
+gha-creds-*.json

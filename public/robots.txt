@@ -1,4 +1,8 @@
 User-agent: *
 Allow: /
-
+Disallow: /portal
+Disallow: /signin
+Disallow: /forgot-password
+Disallow: /accept-invite
+Disallow: /auth/
 Sitemap: https://irobotx.io/sitemap.xml

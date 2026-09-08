@@ -1,0 +1,19 @@
+name: Production release
+on:
+  push:
+    branches: [production]
+  workflow_dispatch:
+permissions: { contents: read, id-token: write }
+concurrency: { group: irobotx-production, cancel-in-progress: false }
+jobs:
+  rules:
+    uses: ./.github/workflows/firebase-rules-merge.yml
+    secrets: inherit
+  functions:
+    needs: rules
+    uses: ./.github/workflows/firebase-functions-merge.yml
+    secrets: inherit
+  hosting:
+    needs: functions
+    uses: ./.github/workflows/firebase-hosting-merge.yml
+    secrets: inherit

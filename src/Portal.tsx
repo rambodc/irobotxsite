@@ -128,9 +128,9 @@ function AuthPage({ path }: { path: string }) {
               name="password"
               type="password"
               required
-              minLength={action ? 12 : undefined}
+              minLength={action ? 6 : undefined}
               autoComplete={action ? "new-password" : "current-password"}
-              placeholder={action ? "At least 12 characters" : "Your password"}
+              placeholder={action ? "At least 6 characters" : "Your password"}
             />
           </label>
         )}
@@ -141,7 +141,7 @@ function AuthPage({ path }: { path: string }) {
               name="confirm"
               type="password"
               required
-              minLength={12}
+              minLength={6}
               autoComplete="new-password"
             />
           </label>

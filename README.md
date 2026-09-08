@@ -29,7 +29,7 @@ Edit company text, industries and demo definitions in `src/content.ts`. Layout a
 
 ## Accounts and application access
 
-Firebase Email/Password sign-in is enabled. Public sign-up and user deletion are disabled at the Firebase Auth project level. The backend additionally denies every user without a server-created invited/active profile. Accounts, assignments and roles cannot be written by browsers.
+Firebase Email/Password sign-in is enabled. Passwords require at least 6 characters, with no uppercase, lowercase, numeric, or special-character requirement. Longer passwords are accepted. Public sign-up and user deletion are disabled at the Firebase Auth project level. The backend additionally denies every user without a server-created invited/active profile. Accounts, assignments and roles cannot be written by browsers.
 
 Initial administrator: `rambodc@irobotx.io`. `scripts/bootstrap-admin.mjs` provisions only this initial profile; an existing profile is preserved. The administrator signs in at `/signin`, opens User Access, invites users, and manages assignments and disabled status. Roles cannot be changed by client requests. The last active administrator cannot be disabled. No delete-user action is exposed.
 

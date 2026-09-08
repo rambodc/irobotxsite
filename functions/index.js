@@ -19,6 +19,8 @@ const db = getFirestore(),
   auth = getAuth();
 const smtpConfig = defineSecret("SMTP_CONFIG");
 const base = {
+  // Emulator integration tests remain isolated from Google's attestation service.
+  enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== "true",
   region: "us-central1",
   maxInstances: 2,
   minInstances: 0,

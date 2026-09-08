@@ -18,7 +18,7 @@ import {
   Search,
   RefreshCw,
 } from "lucide-react";
-import { auth } from "./firebaseClient";
+import { auth, verifyBrowser } from "./firebaseClient";
 import { api, errorMessage, type Profile, type AppId } from "./api";
 import { ContactForm, Link, Logo, navigate } from "./App";
 import { demos } from "./content";
@@ -33,7 +33,7 @@ function AuthPage({ path }: { path: string }) {
   const code = new URLSearchParams(location.search).get("oobCode") || "";
   useEffect(() => {
     if (action) {
-      verifyPasswordResetCode(auth, code)
+      verifyBrowser().then(() => verifyPasswordResetCode(auth, code))
         .then((email) => {
           setEmail(email);
           setValid(true);
@@ -47,6 +47,7 @@ function AuthPage({ path }: { path: string }) {
     setError("");
     const data = new FormData(e.currentTarget);
     try {
+      await verifyBrowser();
       if (reset) {
         await api.reset(String(data.get("email")));
         setMessage(

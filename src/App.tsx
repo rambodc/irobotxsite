@@ -14,23 +14,20 @@ import {
   Menu,
   X,
   Sparkles,
-  Info,
 } from "lucide-react";
 import {
   company,
   industries,
-  demos,
   images,
   home,
   about,
-  concepts,
-  demoPage,
   contact,
   cta,
   metadata,
   type ImageId,
 } from "./content";
 import { api, errorMessage } from "./api";
+const DemoWorkspace = lazy(() => import("./DemoWorkspace"));
 const Portal = lazy(() => import("./Portal"));
 const publicPaths = ["/", "/about", "/demo", "/contact"];
 export function Link({
@@ -68,7 +65,10 @@ export function navigate(to: string) {
   window.scrollTo({ top: 0, behavior: "instant" });
   if (url.hash)
     setTimeout(
-      () => document.getElementById(url.hash.slice(1))?.scrollIntoView({ behavior: "instant" }),
+      () =>
+        document
+          .getElementById(url.hash.slice(1))
+          ?.scrollIntoView({ behavior: "instant" }),
       100,
     );
 }
@@ -84,10 +84,10 @@ export function Mark({ className = "" }: { className?: string }) {
     />
   );
 }
-export function Logo() {
+export function Logo({ showMark = true }: { showMark?: boolean } = {}) {
   return (
     <span className="logo">
-      <Mark />
+      {showMark && <Mark />}
       <span>
         iRobot<strong>X</strong>
       </span>
@@ -142,13 +142,13 @@ function Header({ path }: { path: string }) {
   return (
     <header className="site-header">
       <Link to="/" aria-label="iRobotX home">
-        <Logo />
+        <Logo showMark={false} />
       </Link>
       <nav className="nav-pill" aria-label="Main navigation">
         {[
           ["Home", "/"],
           ["About us", "/about"],
-          ["Demo", "/demo"],
+          ["Client sign in", "/signin"],
           ["Contact", "/contact"],
         ].map(([label, to]) => (
           <Link
@@ -160,8 +160,12 @@ function Header({ path }: { path: string }) {
           </Link>
         ))}
       </nav>
-      <Link to="/signin" className="header-signin">
-        Client sign in <ArrowUpRight size={16} />
+      <Link
+        to="/demo"
+        className="header-demo"
+        aria-current={path === "/demo" ? "page" : undefined}
+      >
+        Demo <ArrowUpRight size={16} />
       </Link>
       <button
         className="menu-button"
@@ -504,79 +508,6 @@ function About() {
     </>
   );
 }
-function Demo() {
-  return (
-    <>
-      <section className="page-hero brand-page-hero">
-        <Mark className="page-watermark" />
-        <span className="eyebrow">{demoPage.eyebrow}</span>
-        <h1>{demoPage.title}</h1>
-        <p>{demoPage.intro}</p>
-      </section>
-      <div className="gallery-note">
-        <Info size={18} />
-        <p>{demoPage.disclosure}</p>
-      </div>
-      <section
-        className="content-section concept-gallery"
-        aria-label="Oil & Gas visual concepts"
-      >
-        {concepts.map((concept) => (
-          <Reveal key={concept.id} className="concept-card">
-            <article id={concept.id}>
-              <div className="concept-art">
-                <Art name={concept.image} />
-                <div className="concept-art-top">
-                  <span>
-                    {concept.number} / {concept.category}
-                  </span>
-                  <span className="badge">Visual concept</span>
-                </div>
-                {concept.id === "ai-workspace" && (
-                  <div className="gallery-ai-question">
-                    <Mark />
-                    <span>{home.ai.example}</span>
-                  </div>
-                )}
-              </div>
-              <div className="concept-copy">
-                <div>
-                  <span className="eyebrow">{concept.category}</span>
-                  <h2>{concept.name}</h2>
-                </div>
-                <div>
-                  <p>{concept.text}</p>
-                  <div className="tags">
-                    {concept.tags.map((tag) => (
-                      <span key={tag}>{tag}</span>
-                    ))}
-                  </div>
-                  <span className="concept-disclosure">{concept.note}</span>
-                </div>
-              </div>
-            </article>
-          </Reveal>
-        ))}
-        <div className="future-heading">
-          <span className="eyebrow">Robotics &amp; FinTech</span>
-          <h2>{demoPage.future}</h2>
-        </div>
-        <div className="future-grid">
-          {demos.slice(1).map((demo) => (
-            <article className="panel future-card" key={demo.id}>
-              <Mark />
-              <span className="badge muted">Coming soon</span>
-              <span className="eyebrow">{demo.category}</span>
-              <h3>{demo.name}</h3>
-              <p>{demo.text}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-      <CTA />
-    </>
-  );
-}
 
 export function ContactForm({
   prefill,
@@ -830,7 +761,13 @@ export default function App() {
         ) : path === "/about" ? (
           <About />
         ) : path === "/demo" ? (
-          <Demo />
+          <Suspense
+            fallback={
+              <div className="route-loading">Opening the demo workspace…</div>
+            }
+          >
+            <DemoWorkspace />
+          </Suspense>
         ) : path === "/contact" ? (
           <Contact />
         ) : (

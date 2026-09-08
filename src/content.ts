@@ -193,7 +193,7 @@ export const demoPage = {
   eyebrow: "The possibilities, visualized",
   title: "See what we could build together.",
   intro:
-    "Explore three ideas for a custom Oil & Gas platform. Each concept shows a different way to connect your operation, your people, and your intelligence.",
+    "Explore an interactive sample company workspace with mini apps for operations, AI, finance, and team access. Discover what a custom Oil & Gas platform could look like for your organization.",
   disclosure:
     "These are illustrative concepts with sample information—not a live product, an engineering simulation, or connected operational data.",
   future: "More possibilities ahead.",
@@ -243,7 +243,7 @@ export const metadata = {
     description: about.intro,
   },
   "/demo": {
-    title: "Oil & Gas platform concepts | iRobotX",
+    title: "Interactive company workspace demo | iRobotX",
     description: demoPage.intro,
   },
   "/contact": {

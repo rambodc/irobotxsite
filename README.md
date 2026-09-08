@@ -92,4 +92,12 @@ Six cinematic images were generated with the built-in image generation tool. Ori
 
 `public/brand/` includes transparent blue, white and monochrome iX marks, horizontal lockups, square/circular versions, and PNG exports. `scripts/brand-assets.mjs` defines the shared SVG geometry. The same mark appears in public navigation/footer, authentication, the portal, the favicon and social card. Treat background marks as decorative; retain meaningful alternative text for the cinematic images.
 
-Home prioritizes custom Oil & Gas platforms and tailored AI integration. About preserves Oil & Gas, Robotics and FinTech anchors. Demo presents three labeled visual concepts with no live operational data or working AI. The private portal retains its stable application IDs and coming-soon status.
+Home prioritizes custom Oil & Gas platforms and tailored AI integration. About preserves Oil & Gas, Robotics and FinTech anchors. Demo presents an interactive fictional company workspace with nine mini apps and scripted AI examples. The private portal retains its stable application IDs and coming-soon status.
+
+## Interactive demo
+
+`src/DemoWorkspace.tsx` is lazy-loaded at `/demo`; `src/demoContent.ts` holds typed app definitions, sample users, records, preset AI answers, and contextual hints. `src/demo.css` contains the isolated workspace styling. The prefilled sign-in is fictional. All demo mutations stay in React memory; refreshing or Reset clears them. No demo action calls authentication, email, Firestore, or AI APIs.
+
+Manager, staff, and contractor perspectives demonstrate app-level access. Only the manager can create sample invitations, assign apps, or approve expenses. User Access is always manager-only. Perspective switching is a demonstration control, not real authentication. The real portal continues at `/signin`. Sample financial values are CAD; daily production values are m³. Accounting totals are illustrative and the invoice list is only a subset of sample activity.
+
+Existing `/demo#well-visibility`, `/demo#connected-operations`, and `/demo#ai-workspace` links open Wells, Tracking, or AI Assistant after the sample sign-in. Contextual hints offer Show all and Replay hint, with static text for reduced-motion users. App selections and filters persist while navigating within the current user's demo workspace.

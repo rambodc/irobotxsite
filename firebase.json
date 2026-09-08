@@ -1,0 +1,21 @@
+{
+  "hosting": {
+    "public": "public",
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "redirects": [
+      { "source": "/live-experiences", "destination": "/music-technology", "type": 301 }
+    ],
+    "headers": [
+      {
+        "source": "**/*.(css|js)",
+        "headers": [{ "key": "Cache-Control", "value": "public,max-age=3600" }]
+      },
+      {
+        "source": "**/*.(png|svg)",
+        "headers": [{ "key": "Cache-Control", "value": "public,max-age=86400" }]
+      }
+    ],
+    "cleanUrls": true,
+    "trailingSlash": false
+  }
+}

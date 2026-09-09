@@ -1,11 +1,12 @@
+import { demoModel } from "./demo-config.js";
 import { onRequest } from "firebase-functions/v2/https";
-import { defineSecret, defineString } from "firebase-functions/params";
+import { defineSecret } from "firebase-functions/params";
 import { getAppCheck } from "firebase-admin/app-check";
 import { getFirestore } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
 import pdf from "pdf-parse/lib/pdf-parse.js";
 const key = defineSecret("OPENAI_API_KEY");
-const model = defineString("DEMO_AI_MODEL", { default: "gpt-5.6-terra" });
+const model = () => process.env.DEMO_AI_MODEL || demoModel;
 const options = {
   region: "us-central1",
   maxInstances: 2,
@@ -105,7 +106,7 @@ async function requestAI(body, signal) {
       Authorization: `Bearer ${key.value()}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ model: model.value(), store: false, ...body }),
+    body: JSON.stringify({ model: model(), store: false, ...body }),
     signal,
   });
   if (!response.ok)
@@ -156,7 +157,7 @@ export const demoChat = endpoint("chat", async (req, res, charge) => {
         !["user", "assistant"].includes(m.role) ||
         typeof m.content !== "string" ||
         !m.content.trim() ||
-        m.content.length > 6000,
+        m.content.length > (m.role === "assistant" ? 12000 : 6000),
     ) ||
     messages.at(-1).role !== "user" ||
     messages.reduce((n, m) => n + m.content.length, 0) > 24000

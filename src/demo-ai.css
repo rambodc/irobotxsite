@@ -375,3 +375,16 @@
     padding-bottom: 0;
   }
 }
+.pc-workspace:has(.well-workspace) > .pc-return {
+  top: 82px;
+  left: auto;
+  right: 12px;
+  transform: none;
+}
+.ai-record-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: #79bfff;
+}

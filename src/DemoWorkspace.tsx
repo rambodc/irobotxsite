@@ -849,6 +849,7 @@ export default function DemoWorkspace() {
   const [chats, setChats] = useState<Record<string, ChatState>>({});
   const [finders, setFinders] = useState<Record<string, FinderState>>({});
   const [revision, setRevision] = useState(0);
+  const generation = useRef(0);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const hasOpened = useRef(false);
   const homeRef = useRef<HTMLButtonElement>(null);
@@ -970,6 +971,7 @@ export default function DemoWorkspace() {
     setActive(null);
   }
   function reset() {
+    generation.current += 1;
     setChats({});
     setFinders({});
     setEmployees(structuredClone(initialEmployees));
@@ -1071,13 +1073,17 @@ export default function DemoWorkspace() {
                 state={chats[actor.id] || newChat()}
                 canUse={allowed(actor, "chat", "use")}
                 setState={(value) =>
-                  setChats((old) => ({
-                    ...old,
-                    [actor.id]:
-                      typeof value === "function"
-                        ? value(old[actor.id] || newChat())
-                        : value,
-                  }))
+                  setChats((old) =>
+                    generation.current !== revision
+                      ? old
+                      : {
+                          ...old,
+                          [actor.id]:
+                            typeof value === "function"
+                              ? value(old[actor.id] || newChat())
+                              : value,
+                        },
+                  )
                 }
               />
             )}
@@ -1086,13 +1092,17 @@ export default function DemoWorkspace() {
                 state={finders[actor.id] || newFinder()}
                 canUse={allowed(actor, "lsd", "use")}
                 setState={(value) =>
-                  setFinders((old) => ({
-                    ...old,
-                    [actor.id]:
-                      typeof value === "function"
-                        ? value(old[actor.id] || newFinder())
-                        : value,
-                  }))
+                  setFinders((old) =>
+                    generation.current !== revision
+                      ? old
+                      : {
+                          ...old,
+                          [actor.id]:
+                            typeof value === "function"
+                              ? value(old[actor.id] || newFinder())
+                              : value,
+                        },
+                  )
                 }
               />
             )}

@@ -200,12 +200,22 @@ function CameraController({
     if (perspective.aspect < 0.9) {
       // Fit actual projected stations in portrait, reserving room for touch controls.
       const direction = new THREE.Vector3(1, 0.5, 1).normalize();
-      const right = new THREE.Vector3().crossVectors(direction, camera.up).normalize();
+      const right = new THREE.Vector3()
+        .crossVectors(direction, camera.up)
+        .normalize();
       const up = new THREE.Vector3().crossVectors(right, direction).normalize();
-      distance = Math.max(...points.map(point => {
-        const offset = point.clone().sub(center);
-        return Math.max(Math.abs(offset.dot(right)) / (Math.tan(h / 2) * 0.86), Math.abs(offset.dot(up)) / (Math.tan(v / 2) * 0.68)) + offset.dot(direction);
-      })) * 1.08;
+      distance =
+        Math.max(
+          ...points.map((point) => {
+            const offset = point.clone().sub(center);
+            return (
+              Math.max(
+                Math.abs(offset.dot(right)) / (Math.tan(h / 2) * 0.86),
+                Math.abs(offset.dot(up)) / (Math.tan(v / 2) * 0.68),
+              ) + offset.dot(direction)
+            );
+          }),
+        ) * 1.08;
     }
     camera.position.copy(
       center

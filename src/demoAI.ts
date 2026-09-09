@@ -1,0 +1,94 @@
+import { getToken } from "firebase/app-check";
+import { appCheck, verifyBrowser } from "./firebaseClient";
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+export interface LsdCandidate {
+  description: string;
+  wellName: string | null;
+  uwi: string | null;
+  licence: string | null;
+  operator: string | null;
+  status: string | null;
+  sourceDate: string | null;
+  sourceUrl: string | null;
+  location: {
+    latitude: number;
+    longitude: number;
+    kind: "surface" | "bottom-hole";
+    sourceUrl: string;
+  } | null;
+}
+export interface LsdResult {
+  normalized: string;
+  summary: string;
+  candidates: LsdCandidate[];
+  sources: { url: string; title: string }[];
+  notice: string;
+}
+export interface PhotoResult {
+  candidates: { text: string; normalized: string }[];
+  note: string;
+}
+export async function aiRequest(
+  name: string,
+  body: unknown,
+  signal?: AbortSignal,
+) {
+  await verifyBrowser();
+  const token = appCheck ? (await getToken(appCheck)).token : null;
+  const response = await fetch(
+    `https://us-central1-irobotxsite.cloudfunctions.net/${name}`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { "X-Firebase-AppCheck": token } : {}),
+      },
+      body: JSON.stringify(body),
+      signal,
+    },
+  );
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(
+      data.error ||
+        "The AI service could not complete this request. Please retry.",
+    );
+  }
+  return response;
+}
+export async function streamChat(
+  messages: ChatMessage[],
+  onDelta: (text: string) => void,
+  signal: AbortSignal,
+) {
+  const response = await aiRequest("demoChat", { messages }, signal);
+  if (!response.body)
+    throw new Error("Streaming is unavailable. Please retry.");
+  const reader = response.body.getReader(),
+    decoder = new TextDecoder();
+  let buffer = "",
+    done = false;
+  try {
+    while (true) {
+      const chunk = await reader.read();
+      if (chunk.done) break;
+      buffer += decoder.decode(chunk.value, { stream: true });
+      let index;
+      while ((index = buffer.indexOf("\n")) >= 0) {
+        const line = buffer.slice(0, index);
+        buffer = buffer.slice(index + 1);
+        if (!line.trim()) continue;
+        const value = JSON.parse(line);
+        if (value.error) throw new Error(value.error);
+        if (value.delta) onDelta(value.delta);
+        if (value.done) done = true;
+      }
+    }
+    if (!done) throw new Error("The response was interrupted. Please retry.");
+  } finally {
+    reader.releaseLock();
+  }
+}

@@ -1,5 +1,15 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
+import {
+  Bot,
+  MapPinned,
+  Box,
   ArrowLeft,
   ArrowUpRight,
   Building2,
@@ -39,7 +49,19 @@ import {
   type Permissions,
 } from "./demoContent";
 import "./demo.css";
+import {
+  AIChat,
+  LSDFinder,
+  newChat,
+  newFinder,
+  type ChatState,
+  type FinderState,
+} from "./DemoAIApps";
+const WellViewer = lazy(() => import("./well-viewer/WellViewer"));
 const appIcons = {
+  chat: Bot,
+  lsd: MapPinned,
+  well: Box,
   profile: UserRound,
   company: Building2,
   employees: UsersRound,
@@ -511,7 +533,9 @@ function PermissionEditor({
                 ? "View own profile"
                 : app.id === "company"
                   ? "View company"
-                  : "View directory"}
+                  : app.id === "employees"
+                    ? "View directory"
+                    : "View app"}
               <small>Show {app.name} app</small>
             </span>
           </label>
@@ -822,6 +846,8 @@ export default function DemoWorkspace() {
   const [actorId, setActorId] = useState("john");
   const [active, setActive] = useState<AppId | null>(null);
   const [options, setOptions] = useState(false);
+  const [chats, setChats] = useState<Record<string, ChatState>>({});
+  const [finders, setFinders] = useState<Record<string, FinderState>>({});
   const [revision, setRevision] = useState(0);
   const titleRef = useRef<HTMLHeadingElement>(null);
   const hasOpened = useRef(false);
@@ -944,6 +970,8 @@ export default function DemoWorkspace() {
     setActive(null);
   }
   function reset() {
+    setChats({});
+    setFinders({});
     setEmployees(structuredClone(initialEmployees));
     setCompany({ ...initialCompany });
     setActorId("john");
@@ -975,6 +1003,7 @@ export default function DemoWorkspace() {
       )}
       {!app ? (
         <nav className="pc-launcher" aria-label="Employee apps">
+          <h1 className="pc-demo-heading">Demo</h1>
           {apps
             .filter((a) => allowed(actor, a.id))
             .map((a, index) => {
@@ -1009,6 +1038,10 @@ export default function DemoWorkspace() {
             </div>
           )}
         </nav>
+      ) : app === "well" ? (
+        <Suspense fallback={<p>Opening well…</p>}>
+          <WellViewer onBack={() => setActive(null)} />
+        </Suspense>
       ) : (
         <div className={`pc-app-window pc-window-${app}`}>
           <div className="pc-app-toolbar">
@@ -1033,6 +1066,36 @@ export default function DemoWorkspace() {
             className="pc-app-content"
             key={`${actor.id}-${revision}-${app}`}
           >
+            {app === "chat" && (
+              <AIChat
+                state={chats[actor.id] || newChat()}
+                canUse={allowed(actor, "chat", "use")}
+                setState={(value) =>
+                  setChats((old) => ({
+                    ...old,
+                    [actor.id]:
+                      typeof value === "function"
+                        ? value(old[actor.id] || newChat())
+                        : value,
+                  }))
+                }
+              />
+            )}
+            {app === "lsd" && (
+              <LSDFinder
+                state={finders[actor.id] || newFinder()}
+                canUse={allowed(actor, "lsd", "use")}
+                setState={(value) =>
+                  setFinders((old) => ({
+                    ...old,
+                    [actor.id]:
+                      typeof value === "function"
+                        ? value(old[actor.id] || newFinder())
+                        : value,
+                  }))
+                }
+              />
+            )}
             {app === "profile" && (
               <Profile person={actor} company={company} save={saveProfile} />
             )}
@@ -1056,7 +1119,11 @@ export default function DemoWorkspace() {
           </div>
         </div>
       )}
-      <div className="pc-workspace-options" ref={menuRef}>
+      <div
+        className="pc-workspace-options"
+        hidden={app === "well"}
+        ref={menuRef}
+      >
         <button
           ref={menuButton}
           className="pc-options-button"

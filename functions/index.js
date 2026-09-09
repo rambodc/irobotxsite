@@ -403,3 +403,5 @@ export const submitContact = endpoint(mailBase, async (request) => {
     return { delivery: "failed", id };
   }
 });
+
+export { demoChat, extractLsd, findLsd } from './demo-ai.js';

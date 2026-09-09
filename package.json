@@ -17,11 +17,14 @@
     "assets": "node scripts/image-assets.mjs"
   },
   "dependencies": {
+    "@react-three/drei": "^10.7.8",
+    "@react-three/fiber": "^9.7.0",
     "firebase": "^12.18.0",
     "lucide-react": "^1.33.0",
     "motion": "^12.23.24",
     "react": "19.2.6",
-    "react-dom": "19.2.6"
+    "react-dom": "19.2.6",
+    "three": "^0.185.1"
   },
   "devDependencies": {
     "@eslint/js": "9.39.4",
@@ -31,6 +34,7 @@
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",
     "@types/react-dom": "19.2.3",
+    "@types/three": "^0.183.1",
     "@vitejs/plugin-react": "6.0.2",
     "eslint": "9.39.4",
     "eslint-plugin-jsx-a11y": "6.10.2",

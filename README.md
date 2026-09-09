@@ -25,7 +25,7 @@ Set `VITE_EMULATORS=true` in `.env.local` to use local Auth/Functions. Integrati
 
 Public pages: `/`, `/about`, `/demo`, `/contact`. Authentication: `/signin`, `/forgot-password`, `/accept-invite`, `/auth/action`. Private workspace: `/portal`, `/portal/account`, `/portal/contact`, `/portal/admin`.
 
-Edit public-page copy, industries, concept definitions, image descriptions and page metadata in `src/content.ts`. Layout is in `src/App.tsx`; blue theme tokens and responsive rules are in `src/styles.css`. The site uses static cinematic images and reduced-motion-aware reveals; it does not load Three.js or require WebGL. The demo is illustrative only; no engineering calculations, operational data or full industry applications are included. Public route metadata is emitted by `scripts/page-metadata.mjs`; update it when changing page positioning.
+Edit public-page copy, industries, concept definitions, image descriptions and page metadata in `src/content.ts`. Layout is in `src/App.tsx`; blue theme tokens and responsive rules are in `src/styles.css`. The site uses static cinematic images and reduced-motion-aware reveals; Three.js loads only when the demo Well Viewer opens, with a static fallback when WebGL is unavailable. The demo combines fictional employee/well data with real AI Chat and public-source LSD research; it includes no engineering calculations or live operational integrations. Public route metadata is emitted by `scripts/page-metadata.mjs`; update it when changing page positioning.
 
 ## Accounts and application access
 
@@ -92,16 +92,31 @@ Six cinematic images were generated with the built-in image generation tool. Ori
 
 `public/brand/` includes transparent blue, white and monochrome iX marks, horizontal lockups, square/circular versions, and PNG exports. `scripts/brand-assets.mjs` defines the shared SVG geometry. The same mark appears in the public footer, authentication, the portal, the favicon and social card. Treat background marks as decorative; retain meaningful alternative text for the cinematic images.
 
-Home prioritizes custom Oil & Gas platforms and tailored AI integration. About preserves Oil & Gas, Robotics and FinTech anchors. Demo opens a full-screen fictional employee workspace with Profile, Company, and Employees. The private portal retains its stable application IDs and coming-soon status.
+Home prioritizes custom Oil & Gas platforms and tailored AI integration. About preserves Oil & Gas, Robotics and FinTech anchors. Demo opens a full-screen fictional employee workspace with Profile, Company, Employees, AI Chat, LSD Finder, and Well Viewer. The private portal retains its stable application IDs and coming-soon status.
 
 ## Interactive demo
 
-`src/DemoWorkspace.tsx` is lazy-loaded at `/demo`, outside the public header/footer. The home screen has only Profile, Company, and Employees. App definitions, employee/company records, and action permissions live in `src/demoContent.ts`; styling is isolated in `src/demo.css`. Retired gallery fragments return to the launcher.
+`src/DemoWorkspace.tsx` is lazy-loaded at `/demo`, outside the public header/footer. The home screen has Profile, Company, Employees, AI Chat, LSD Finder, and Well Viewer. App definitions, employee/company records, and action permissions live in `src/demoContent.ts`; styling is isolated in `src/demo.css`. Retired gallery fragments return to the launcher.
 
-The default employee is John Miller at fictional PulseCrest Energy Inc. Profile edits update the same employee record shown in the directory. Company details, employee creation/editing, granular access, and portraits are held only in React memory. Refresh or Reset workspace restores the initial data. No demo actions call authentication, email, Firestore, or AI APIs. The real portal remains at `/signin`.
+The default employee is John Miller at fictional PulseCrest Energy Inc. Profile edits update the same employee record shown in the directory. Company details, employee creation/editing, granular access, and portraits are held only in React memory. Refresh or Reset workspace restores the initial data. Employee/company actions never call authentication, email, or database APIs. AI apps call dedicated backend endpoints; transcripts, photos, and results remain temporary. The real portal remains at `/signin`.
 
 View permissions control app visibility; action permissions independently control editing, employee creation, and access management. Disabling View clears dependent actions. New employees get their own editable Profile and read-only Company by default. John retains all permissions and active status. View as employee applies that employee's permissions, with a separate Return to John control. Email uniqueness is case-insensitive. Photo uploads accept decodable JPEG/PNG/WebP images up to 5 MB; Cancel discards them and Save updates only memory.
 
 Company uses a downtown Calgary OpenStreetMap embed with attribution and a permanent external map link. The marker is an illustrative location, not an actual PulseCrest office. Contact addresses use the reserved `.example` domain and phone numbers are fictional.
 
 John's fictional portrait was generated with the built-in image generation tool. The source is `assets/artwork/john-miller.png`, the compressed asset is `public/images/people/john-miller.webp`, and the exact prompt is `assets/artwork/john-miller-prompt.json`.
+
+
+### Demo AI and well viewer
+
+`src/DemoAIApps.tsx` and `src/demoAI.ts` provide chat streaming and photo/lookup interfaces. State is scoped to the selected fictional employee in memory. Refresh/Reset clears it. View and Use permissions govern the UI; these fictional permissions are not a backend identity.
+
+`functions/demo-ai.js` exports `demoChat`, `extractLsd`, and `findLsd`. Every endpoint validates existing App Check tokens. UTC daily limits are site-wide 100/25/25 and per-IP 10/3/3 for chat/lookup/photo; each also allows at most three requests per minute per IP. Limits are transactional, and failed AI calls still count. Only hashed-IP/global counters and expiration timestamps enter the server-only `rateLimits` collection. OpenAI requests use `store: false`; no transcripts or photos are saved by this application. Counter documents carry a two-day `expiresAt` for the existing TTL policy.
+
+The `OPENAI_API_KEY` secret is entered through `python3 scripts/configure-openai.py` using a hidden local prompt and stored in Secret Manager. Never put it in frontend environment variables. The Functions parameter `DEMO_AI_MODEL` defaults to `gpt-5.6-terra`; change it in Functions configuration and redeploy Functions without rebuilding Hosting. Set conservative billing alerts in the OpenAI project separately if desired.
+
+LSD lookup uses Alberta/AER web search, then structured extraction. Coordinates must occur with the matching well identifier and surface/bottom-hole label in an independently retrieved government source excerpt; otherwise no map pin is rendered. Unsupported fields remain unavailable. It is not a land-description conversion engine or an exhaustive well registry.
+
+The Well Viewer is adapted from `rambodc/uniq` production commit `1030fce0f65aafbe4299cf167ec5109676b7861a`. Its fixed metric dataset is in `src/well-viewer/sample-well.ts`. A main bore and three laterals share exact junction stations. Survey, casing, and drilling values are illustrative. No package import, saved-well library, cloud storage, or geometry editor is included.
+
+Release AI backend changes through `production` with Functions first, then Hosting; unchanged Firestore rules are skipped automatically. For rollback, restore the prior production commit and redeploy the changed components. Removing AI UI alone can be released as Hosting only; disable the AI endpoints separately if retiring them.

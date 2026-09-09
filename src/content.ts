@@ -155,7 +155,7 @@ export const about = {
 };
 export const demoPage = {
   intro:
-    "Explore the PulseCrest Energy employee workspace: profiles, company details, and employee access in one connected application.",
+    "Explore an Oil & Gas workspace with AI Chat, sourced Alberta LSD research, a 3D multilateral well, and employee tools.",
 };
 // Stable app IDs are shared with the private portal and backend assignments.
 export const demos = [

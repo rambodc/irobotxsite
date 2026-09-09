@@ -1,5 +1,6 @@
-export type AppId = "profile" | "company" | "employees";
-export type Action = "view" | "edit" | "create" | "manage";
+export type AppId =
+  "profile" | "company" | "employees" | "chat" | "lsd" | "well";
+export type Action = "view" | "edit" | "create" | "manage" | "use";
 export type Permissions = Record<AppId, Partial<Record<Action, boolean>>>;
 export interface Employee {
   id: string;
@@ -47,13 +48,30 @@ export const apps: {
       { id: "manage", label: "Manage app access" },
     ],
   },
+  {
+    id: "chat",
+    name: "AI Chat",
+    actions: [{ id: "use", label: "Send messages" }],
+  },
+  {
+    id: "lsd",
+    name: "LSD Finder",
+    actions: [{ id: "use", label: "Research wells and read photos" }],
+  },
+  { id: "well", name: "Well Viewer", actions: [] },
 ];
 export const fullPermissions: Permissions = {
+  chat: { view: true, use: true },
+  lsd: { view: true, use: true },
+  well: { view: true },
   profile: { view: true, edit: true },
   company: { view: true, edit: true },
   employees: { view: true, create: true, edit: true, manage: true },
 };
 export const defaultPermissions: Permissions = {
+  chat: { view: false },
+  lsd: { view: false },
+  well: { view: false },
   profile: { view: true, edit: true },
   company: { view: true },
   employees: { view: false },

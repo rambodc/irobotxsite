@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Secure local entry for the demo's server-side OpenAI API key."""
 import json, subprocess, urllib.request, urllib.error
-prompt = 'Enter the OpenAI API key for iRobotX AI Chat and LSD Finder. It will be stored in Google Secret Manager, never in the website or repository.'
+prompt = 'Enter the OpenAI API key for iRobotX AI Chat. It will be stored in Google Secret Manager, never in the website or repository.'
 result = subprocess.run(['osascript', '-e', 'text returned of (display dialog '+json.dumps(prompt)+' default answer "" with hidden answer buttons {"Cancel", "Save securely"} default button "Save securely" with title "iRobotX AI setup")'], capture_output=True, text=True)
 if result.returncode: raise SystemExit('Key entry cancelled. Nothing stored.')
 key = result.stdout.strip()

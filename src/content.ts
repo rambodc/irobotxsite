@@ -155,7 +155,7 @@ export const about = {
 };
 export const demoPage = {
   intro:
-    "Explore an Oil & Gas workspace with AI Chat, sourced Alberta LSD research, a 3D multilateral well, and employee tools.",
+    "Explore an Oil & Gas workspace with AI Chat, a 3D multilateral well, and employee tools.",
 };
 // Stable app IDs are shared with the private portal and backend assignments.
 export const demos = [

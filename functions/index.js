@@ -404,4 +404,4 @@ export const submitContact = endpoint(mailBase, async (request) => {
   }
 });
 
-export { demoChat, extractLsd, findLsd } from './demo-ai.js';
+export { demoChat } from './demo-ai.js';

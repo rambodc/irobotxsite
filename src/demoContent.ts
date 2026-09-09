@@ -1,5 +1,4 @@
-export type AppId =
-  "profile" | "company" | "employees" | "chat" | "lsd" | "well";
+export type AppId = "profile" | "company" | "employees" | "chat" | "well";
 export type Action = "view" | "edit" | "create" | "manage" | "use";
 export type Permissions = Record<AppId, Partial<Record<Action, boolean>>>;
 export interface Employee {
@@ -27,21 +26,25 @@ export interface Company {
 export const apps: {
   id: AppId;
   name: string;
+  icon: string;
   actions: { id: Action; label: string }[];
 }[] = [
   {
     id: "profile",
     name: "Profile",
+    icon: "/images/apps/profile.webp",
     actions: [{ id: "edit", label: "Edit own profile" }],
   },
   {
     id: "company",
     name: "Company",
+    icon: "/images/apps/company.webp",
     actions: [{ id: "edit", label: "Edit company details" }],
   },
   {
     id: "employees",
     name: "Employees",
+    icon: "/images/apps/employees.webp",
     actions: [
       { id: "create", label: "Add employees" },
       { id: "edit", label: "Edit employee details" },
@@ -51,18 +54,18 @@ export const apps: {
   {
     id: "chat",
     name: "AI Chat",
+    icon: "/images/apps/chat.webp",
     actions: [{ id: "use", label: "Send messages" }],
   },
   {
-    id: "lsd",
-    name: "LSD Finder",
-    actions: [{ id: "use", label: "Research wells and read photos" }],
+    id: "well",
+    name: "Well Viewer",
+    icon: "/images/apps/well.webp",
+    actions: [],
   },
-  { id: "well", name: "Well Viewer", actions: [] },
 ];
 export const fullPermissions: Permissions = {
   chat: { view: true, use: true },
-  lsd: { view: true, use: true },
   well: { view: true },
   profile: { view: true, edit: true },
   company: { view: true, edit: true },
@@ -70,7 +73,6 @@ export const fullPermissions: Permissions = {
 };
 export const defaultPermissions: Permissions = {
   chat: { view: false },
-  lsd: { view: false },
   well: { view: false },
   profile: { view: true, edit: true },
   company: { view: true },

@@ -1,0 +1,41 @@
+{
+  "generator": "Built-in image_gen",
+  "output": {
+    "width": 300,
+    "height": 300,
+    "format": "webp",
+    "quality": 82
+  },
+  "icons": [
+    {
+      "id": "profile",
+      "prompt": "Use case: stylized-concept. Asset type: premium iPhone-style application icon for a professional Oil & Gas employee workspace. Create ONE square full-bleed app icon: a friendly sculpted white head-and-shoulders profile avatar bust. Colour palette: turquoise and deep teal. Polished soft 3D clay and satin-glass illustration, bold immediately recognizable silhouette, sophisticated colourful gradient background, soft upper-left studio light, delicate contact shadows. Object centered and fills about 70% of image. Straight-on icon composition with subtle isometric depth. Very clean, few large details, excellent legibility when reduced to 80 pixels. Background fills the entire square to every edge; no outer margin, no surrounding phone, no border, no lettering, no words, no watermark. This is part of a coordinated icon family.",
+      "path": "public/images/apps/profile.webp",
+      "source": "/Users/rambodrad/.codex/generated_images/01a0822e-601f-7972-999d-5ba121675425/exec-314e0c2f-91e8-48e2-bdcf-e6d3aa9f7746.png"
+    },
+    {
+      "id": "company",
+      "prompt": "Use case: stylized-concept. Asset type: premium iPhone-style application icon for a professional Oil & Gas employee workspace. Create ONE square full-bleed app icon: a miniature premium golden oil derrick with two simple industrial tanks. Colour palette: amber orange and deep coral. Polished soft 3D clay and satin-glass illustration, bold immediately recognizable silhouette, sophisticated colourful gradient background, soft upper-left studio light, delicate contact shadows. Object centered and fills about 70% of image. Straight-on icon composition with subtle isometric depth. Very clean, few large details, excellent legibility when reduced to 80 pixels. Background fills the entire square to every edge; no outer margin, no surrounding phone, no border, no lettering, no words, no watermark. This is part of a coordinated icon family.",
+      "path": "public/images/apps/company.webp",
+      "source": "/Users/rambodrad/.codex/generated_images/01a0822e-601f-7972-999d-5ba121675425/exec-6e44121a-5f8b-4bb6-bd06-4bae29deaf8e.png"
+    },
+    {
+      "id": "employees",
+      "prompt": "Use case: stylized-concept. Asset type: premium iPhone-style application icon for a professional Oil & Gas employee workspace. Create ONE square full-bleed app icon: three overlapping sculpted friendly head-and-shoulders avatar busts, central person larger. Colour palette: violet and indigo with pink highlights. Polished soft 3D clay and satin-glass illustration, bold immediately recognizable silhouette, sophisticated colourful gradient background, soft upper-left studio light, delicate contact shadows. Object centered and fills about 70% of image. Straight-on icon composition with subtle isometric depth. Very clean, few large details, excellent legibility when reduced to 80 pixels. Background fills the entire square to every edge; no outer margin, no surrounding phone, no border, no lettering, no words, no watermark. This is part of a coordinated icon family.",
+      "path": "public/images/apps/employees.webp",
+      "source": "/Users/rambodrad/.codex/generated_images/01a0822e-601f-7972-999d-5ba121675425/exec-ac7aca56-3e8f-4e50-8487-a1cef2d81f75.png"
+    },
+    {
+      "id": "chat",
+      "prompt": "Use case: stylized-concept. Asset type: premium iPhone-style application icon for a professional Oil & Gas employee workspace. Create ONE square full-bleed app icon: a rounded sculpted white conversation bubble containing a luminous four-point sparkle. Colour palette: electric blue and sky blue. Polished soft 3D clay and satin-glass illustration, bold immediately recognizable silhouette, sophisticated colourful gradient background, soft upper-left studio light, delicate contact shadows. Object centered and fills about 70% of image. Straight-on icon composition with subtle isometric depth. Very clean, few large details, excellent legibility when reduced to 80 pixels. Background fills the entire square to every edge; no outer margin, no surrounding phone, no border, no lettering, no words, no watermark. This is part of a coordinated icon family.",
+      "path": "public/images/apps/chat.webp",
+      "source": "/Users/rambodrad/.codex/generated_images/01a0822e-601f-7972-999d-5ba121675425/exec-954305c1-6da1-4f29-a110-0418d6efbba9.png"
+    },
+    {
+      "id": "well",
+      "prompt": "Use case: stylized-concept. Asset type: premium iPhone-style application icon for a professional Oil & Gas employee workspace. Create ONE square full-bleed app icon: a miniature cutaway earth block showing one vertical wellbore curving into three horizontal branches, clean conceptual shape. Colour palette: ocean blue with copper orange well paths. Polished soft 3D clay and satin-glass illustration, bold immediately recognizable silhouette, sophisticated colourful gradient background, soft upper-left studio light, delicate contact shadows. Object centered and fills about 70% of image. Straight-on icon composition with subtle isometric depth. Very clean, few large details, excellent legibility when reduced to 80 pixels. Background fills the entire square to every edge; no outer margin, no surrounding phone, no border, no lettering, no words, no watermark. This is part of a coordinated icon family.",
+      "path": "public/images/apps/well.webp",
+      "source": "/Users/rambodrad/.codex/generated_images/01a0822e-601f-7972-999d-5ba121675425/exec-a9f91352-ec96-4bd1-bf1b-9579765aea8b.png"
+    }
+  ]
+}

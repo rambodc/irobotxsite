@@ -7,9 +7,6 @@ import {
   type FormEvent,
 } from "react";
 import {
-  Bot,
-  MapPinned,
-  Box,
   ArrowLeft,
   ArrowUpRight,
   Building2,
@@ -49,23 +46,8 @@ import {
   type Permissions,
 } from "./demoContent";
 import "./demo.css";
-import {
-  AIChat,
-  LSDFinder,
-  newChat,
-  newFinder,
-  type ChatState,
-  type FinderState,
-} from "./DemoAIApps";
+import { AIChat, newChat, type ChatState } from "./DemoAIApps";
 const WellViewer = lazy(() => import("./well-viewer/WellViewer"));
-const appIcons = {
-  chat: Bot,
-  lsd: MapPinned,
-  well: Box,
-  profile: UserRound,
-  company: Building2,
-  employees: UsersRound,
-};
 
 function Avatar({ person, size = "" }: { person: Employee; size?: string }) {
   return (
@@ -847,7 +829,6 @@ export default function DemoWorkspace() {
   const [active, setActive] = useState<AppId | null>(null);
   const [options, setOptions] = useState(false);
   const [chats, setChats] = useState<Record<string, ChatState>>({});
-  const [finders, setFinders] = useState<Record<string, FinderState>>({});
   const [revision, setRevision] = useState(0);
   const generation = useRef(0);
   const titleRef = useRef<HTMLHeadingElement>(null);
@@ -973,7 +954,6 @@ export default function DemoWorkspace() {
   function reset() {
     generation.current += 1;
     setChats({});
-    setFinders({});
     setEmployees(structuredClone(initialEmployees));
     setCompany({ ...initialCompany });
     setActorId("john");
@@ -1009,7 +989,6 @@ export default function DemoWorkspace() {
           {apps
             .filter((a) => allowed(actor, a.id))
             .map((a, index) => {
-              const Icon = appIcons[a.id];
               return (
                 <button
                   ref={index === 0 ? homeRef : undefined}
@@ -1023,11 +1002,13 @@ export default function DemoWorkspace() {
                   }}
                 >
                   <span className="pc-icon-art">
-                    {a.id === "profile" && actor.photo ? (
-                      <img src={actor.photo} alt="" width="128" height="128" />
-                    ) : (
-                      <Icon size={46} strokeWidth={1.5} />
-                    )}
+                    <img
+                      src={a.icon}
+                      alt=""
+                      width="300"
+                      height="300"
+                      decoding="async"
+                    />
                   </span>
                   <span>{a.name}</span>
                 </button>
@@ -1081,25 +1062,6 @@ export default function DemoWorkspace() {
                           [actor.id]:
                             typeof value === "function"
                               ? value(old[actor.id] || newChat())
-                              : value,
-                        },
-                  )
-                }
-              />
-            )}
-            {app === "lsd" && (
-              <LSDFinder
-                state={finders[actor.id] || newFinder()}
-                canUse={allowed(actor, "lsd", "use")}
-                setState={(value) =>
-                  setFinders((old) =>
-                    generation.current !== revision
-                      ? old
-                      : {
-                          ...old,
-                          [actor.id]:
-                            typeof value === "function"
-                              ? value(old[actor.id] || newFinder())
                               : value,
                         },
                   )

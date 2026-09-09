@@ -4,38 +4,7 @@ export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
 }
-export interface LsdCandidate {
-  description: string;
-  wellName: string | null;
-  uwi: string | null;
-  licence: string | null;
-  operator: string | null;
-  status: string | null;
-  sourceDate: string | null;
-  sourceUrl: string | null;
-  location: {
-    latitude: number;
-    longitude: number;
-    kind: "surface" | "bottom-hole";
-    sourceUrl: string;
-  } | null;
-}
-export interface LsdResult {
-  normalized: string;
-  summary: string;
-  candidates: LsdCandidate[];
-  sources: { url: string; title: string }[];
-  notice: string;
-}
-export interface PhotoResult {
-  candidates: { text: string; normalized: string }[];
-  note: string;
-}
-export async function aiRequest(
-  name: string,
-  body: unknown,
-  signal?: AbortSignal,
-) {
+async function chatRequest(body: unknown, signal?: AbortSignal) {
   let token: string | null;
   let cancel: (() => void) | undefined;
   try {
@@ -62,7 +31,7 @@ export async function aiRequest(
   }
   signal?.throwIfAborted();
   const response = await fetch(
-    `https://us-central1-irobotxsite.cloudfunctions.net/${name}`,
+    `https://us-central1-irobotxsite.cloudfunctions.net/demoChat`,
     {
       method: "POST",
       headers: {
@@ -87,7 +56,7 @@ export async function streamChat(
   onDelta: (text: string) => void,
   signal: AbortSignal,
 ) {
-  const response = await aiRequest("demoChat", { messages }, signal);
+  const response = await chatRequest({ messages }, signal);
   if (!response.body)
     throw new Error("Streaming is unavailable. Please retry.");
   const reader = response.body.getReader(),

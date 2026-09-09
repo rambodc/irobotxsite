@@ -153,50 +153,9 @@ export const about = {
     "We work with companies to understand how their operations run, connect the information they rely on, and develop web-based applications that help their teams see the bigger picture. AI is a central part of that work, tailored to the tools and capabilities each customer wants to use.",
   ],
 };
-export const concepts = [
-  {
-    id: "well-visibility",
-    number: "01",
-    image: "well",
-    name: "From surface to subsurface.",
-    category: "Well & downhole visibility",
-    text: "Imagine well information, subsurface context, and related operational activity in one view. A custom application can connect the data behind your wells so your teams can explore it with the context they need.",
-    tags: ["Well information", "Subsurface context", "Connected data"],
-    note: "Conceptual cutaway · Not an engineering diagram",
-  },
-  {
-    id: "connected-operations",
-    number: "02",
-    image: "operations",
-    name: "The whole operation. In view.",
-    category: "Connected operations",
-    text: "A shared workspace can connect drilling, production, staff, and external service companies. Bring activity, responsibilities, and information together around the way your operation actually works.",
-    tags: ["Drilling & production", "Team coordination", "Service partners"],
-    note: "Illustrative workspace · Sample information",
-  },
-  {
-    id: "ai-workspace",
-    number: "03",
-    image: "ai",
-    name: "More than a dashboard.",
-    category: "An AI-enabled workspace",
-    text: "An application can help people understand information, not simply display it. We can integrate your preferred AI tools to support questions, reports, information retrieval, and the workflows you want to automate.",
-    tags: [
-      "Operational questions",
-      "Reports & insights",
-      "Your choice of AI tools",
-    ],
-    note: "Visual concept · No live AI or operational data",
-  },
-] as const;
 export const demoPage = {
-  eyebrow: "The possibilities, visualized",
-  title: "See what we could build together.",
   intro:
-    "Explore an interactive sample company workspace with mini apps for operations, AI, finance, and team access. Discover what a custom Oil & Gas platform could look like for your organization.",
-  disclosure:
-    "These are illustrative concepts with sample information—not a live product, an engineering simulation, or connected operational data.",
-  future: "More possibilities ahead.",
+    "Explore the PulseCrest Energy employee workspace: profiles, company details, and employee access in one connected application.",
 };
 // Stable app IDs are shared with the private portal and backend assignments.
 export const demos = [
@@ -243,7 +202,7 @@ export const metadata = {
     description: about.intro,
   },
   "/demo": {
-    title: "Interactive company workspace demo | iRobotX",
+    title: "Employee workspace demo | iRobotX",
     description: demoPage.intro,
   },
   "/contact": {

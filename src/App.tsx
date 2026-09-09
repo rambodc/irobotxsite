@@ -749,6 +749,14 @@ export default function App() {
         />
       </Suspense>
     );
+  if (path === "/demo")
+    return (
+      <Suspense
+        fallback={<main className="route-loading">Opening workspace…</main>}
+      >
+        <DemoWorkspace />
+      </Suspense>
+    );
   return (
     <>
       <a className="skip-link" href="#main">
@@ -760,14 +768,6 @@ export default function App() {
           <Home />
         ) : path === "/about" ? (
           <About />
-        ) : path === "/demo" ? (
-          <Suspense
-            fallback={
-              <div className="route-loading">Opening the demo workspace…</div>
-            }
-          >
-            <DemoWorkspace />
-          </Suspense>
         ) : path === "/contact" ? (
           <Contact />
         ) : (

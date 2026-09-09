@@ -1515,120 +1515,6 @@ legend {
 .about-primary .about-industry-art {
   height: 620px;
 }
-.gallery-note {
-  display: flex;
-  gap: 14px;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px 25px;
-  background: #0d2138;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  color: #70adf3;
-}
-.gallery-note svg {
-  flex-shrink: 0;
-  margin-top: 3px;
-}
-.gallery-note p {
-  font-size: 12px;
-  margin: 0;
-  color: #afc6e0;
-}
-.concept-gallery {
-  padding-top: 40px;
-}
-.concept-card {
-  border: 1px solid var(--line);
-  border-radius: 22px;
-  overflow: hidden;
-  margin-bottom: 35px;
-  background: #0a192c;
-}
-.concept-card article {
-  scroll-margin-top: 35px;
-}
-.concept-art {
-  position: relative;
-  height: 510px;
-}
-.concept-art-top {
-  position: absolute;
-  top: 20px;
-  left: 25px;
-  right: 25px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 15px;
-}
-.concept-art-top > span:first-child {
-  padding: 9px 12px;
-  background: #061426da;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-  font-size: 10px;
-  color: #c2dcfa;
-}
-.concept-art-top .badge {
-  background: #061426da;
-}
-.concept-copy {
-  padding: 36px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 60px;
-}
-.concept-copy h2 {
-  font-size: 36px;
-  margin: 0;
-}
-.concept-copy p {
-  font-size: 14px;
-  margin: 0;
-}
-.gallery-ai-question {
-  position: absolute;
-  bottom: 30px;
-  left: 30px;
-  max-width: 470px;
-  background: #061426e8;
-  backdrop-filter: blur(14px);
-  border: 1px solid #6cacfc40;
-  padding: 22px;
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  gap: 18px;
-  font-size: 21px;
-  line-height: 1.5;
-}
-.future-heading {
-  margin-top: 85px;
-}
-.future-heading h2 {
-  font-size: 36px;
-}
-.future-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 25px;
-}
-.future-card {
-  position: relative;
-}
-.future-card > .ix-mark {
-  margin-bottom: 28px;
-  opacity: 0.7;
-}
-.future-card > .badge {
-  position: absolute;
-  right: 25px;
-  top: 35px;
-}
-.future-card > .eyebrow {
-  margin-bottom: 13px;
-}
 .contact-brand {
   position: relative;
   overflow: hidden;
@@ -1669,9 +1555,6 @@ legend {
   }
   .concept-panel {
     width: 300px;
-  }
-  .gallery-note {
-    margin-inline: 40px;
   }
   .about-industry {
     gap: 35px;
@@ -1810,43 +1693,6 @@ legend {
   .about-industry-copy h2 {
     font-size: 35px;
   }
-  .gallery-note {
-    margin-inline: 24px;
-    padding: 18px;
-  }
-  .concept-art {
-    height: 400px;
-  }
-  .concept-art-top {
-    left: 15px;
-    right: 15px;
-    top: 15px;
-    flex-wrap: wrap;
-  }
-  .concept-copy {
-    grid-template-columns: 1fr;
-    padding: 25px;
-    gap: 20px;
-  }
-  .concept-copy h2 {
-    font-size: 31px;
-  }
-  .concept-copy .eyebrow {
-    margin-bottom: 14px;
-  }
-  .gallery-ai-question {
-    left: 15px;
-    right: 15px;
-    bottom: 15px;
-    font-size: 17px;
-    padding: 18px;
-  }
-  .future-grid {
-    grid-template-columns: 1fr;
-  }
-  .future-heading {
-    margin-top: 55px;
-  }
   .contact-layout {
     padding-top: 20px;
   }
@@ -1868,10 +1714,6 @@ legend {
 /* Keep the complete well trajectory visible in the cutaway concepts. */
 .about-primary .cinematic-art img {
   object-fit: contain;
-}
-.concept-card:first-child .concept-art {
-  height: auto;
-  aspect-ratio: 3 / 2;
 }
 .art-robotics img {
   object-position: 50% 30%;

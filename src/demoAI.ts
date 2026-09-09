@@ -36,8 +36,31 @@ export async function aiRequest(
   body: unknown,
   signal?: AbortSignal,
 ) {
-  await verifyBrowser();
-  const token = appCheck ? (await getToken(appCheck)).token : null;
+  let token: string | null;
+  let cancel: (() => void) | undefined;
+  try {
+    signal?.throwIfAborted();
+    const verification = (async () => {
+      await verifyBrowser();
+      return appCheck ? (await getToken(appCheck)).token : null;
+    })();
+    token = await Promise.race([
+      verification,
+      new Promise<never>((_, reject) => {
+        cancel = () =>
+          reject(new DOMException("Request stopped", "AbortError"));
+        signal?.addEventListener("abort", cancel, { once: true });
+      }),
+    ]);
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw new Error(
+      "Browser verification could not complete. Refresh this page in a regular browser and try again.",
+    );
+  } finally {
+    if (cancel) signal?.removeEventListener("abort", cancel);
+  }
+  signal?.throwIfAborted();
   const response = await fetch(
     `https://us-central1-irobotxsite.cloudfunctions.net/${name}`,
     {

@@ -70,12 +70,10 @@ export function AIChat({
   }, [state.messages]);
   async function send(text: string, retry = false) {
     if (!canUse || busy || !text.trim()) return;
+    const saved = state.messages.filter((message) => message.content.trim());
     const history = retry
-      ? state.messages.slice(
-          0,
-          state.messages.map((m) => m.role).lastIndexOf("user") + 1,
-        )
-      : [...state.messages, { role: "user" as const, content: text.trim() }];
+      ? saved.slice(0, saved.map((m) => m.role).lastIndexOf("user") + 1)
+      : [...saved, { role: "user" as const, content: text.trim() }];
     if (
       history.length > 19 ||
       history.reduce((sum, m) => sum + m.content.length, 0) > 23000
@@ -169,7 +167,21 @@ export function AIChat({
         {state.messages.map((m, i) => (
           <article className={`ai-message ${m.role}`} key={i}>
             <span>{m.role === "user" ? "You" : "iRobotX"}</span>
-            <p>{m.content || "Thinking…"}</p>
+            <p>
+              {m.content
+                ? m.content
+                    .split(/(\*\*[^*\n]+\*\*)/g)
+                    .map((part, index) =>
+                      part.startsWith("**") && part.endsWith("**") ? (
+                        <strong key={index}>{part.slice(2, -2)}</strong>
+                      ) : (
+                        part
+                      ),
+                    )
+                : busy
+                  ? "Thinking…"
+                  : "No reply received."}
+            </p>
           </article>
         ))}
         <div ref={end} />

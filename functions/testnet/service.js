@@ -18,6 +18,7 @@ import {
   wallet,
   balanceGuard,
   actualResult,
+  ledgerFailure,
   covered,
   drops,
   issued,
@@ -669,7 +670,7 @@ async function reconcile(lease, i, h) {
       await finish(
         lease,
         actual.result === "tesSUCCESS" ? "validated" : "failed",
-        actual.result === "tesSUCCESS" ? null : actual.result,
+        actual.result === "tesSUCCESS" ? null : ledgerFailure(actual.result),
         actual,
       );
       return true;

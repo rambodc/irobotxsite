@@ -12,6 +12,7 @@ import {
   levels,
   checkBook,
   actualResult,
+  ledgerFailure,
 } from "../testnet/ledger.js";
 import { publicIntent } from "../testnet/service.js";
 const asset = { currency: "USD", issuer: "rg2MAgwqwmV9TgMexVBpRDK89vMyJkpbC" };
@@ -140,4 +141,10 @@ test("Faucet unavailability and delayed funding report resumable failures", asyn
       }),
     /not yet validated/,
   );
+});
+
+test("Validated failures explain their outcome without implying a fill", () => {
+  assert.match(ledgerFailure("tecKILLED"), /could not fill/);
+  assert.match(ledgerFailure("tecFROZEN"), /frozen/);
+  assert.match(ledgerFailure("tecUNKNOWN"), /failed transaction/);
 });

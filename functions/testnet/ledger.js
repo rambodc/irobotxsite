@@ -290,3 +290,20 @@ export function covered(ranges, min, max) {
       return a <= min && (b ?? a) >= max;
     });
 }
+
+export function ledgerFailure(code) {
+  const explanations = {
+    tecKILLED:
+      "The immediate-or-cancel order could not fill within its price limit.",
+    tecUNFUNDED_OFFER:
+      "The ledger rejected the order because spendable funds were insufficient.",
+    tecFROZEN:
+      "The ledger rejected the trade because the asset or trust line is frozen.",
+    tecNO_AUTH: "The issuer has not authorized this account to hold the token.",
+    tecNO_LINE: "The required trust line is missing.",
+    tecINSUF_RESERVE_LINE:
+      "There is insufficient XRP reserve for this trust line.",
+    tecPATH_DRY: "No executable liquidity was available.",
+  };
+  return `${explanations[code] || "The ledger validated a failed transaction. Review its result before retrying."} (${code})`;
+}

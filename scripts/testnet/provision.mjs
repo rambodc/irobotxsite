@@ -1,5 +1,6 @@
 // Run from repository root with Node 22. Secrets never leave process memory except
 // the authenticated Secret Manager API; no seed or faucet response is logged.
+import { ensureFunded } from "../../functions/testnet/provisioning.js";
 import { execFileSync } from "node:child_process";
 import { Wallet } from "../../functions/node_modules/xrpl/dist/npm/index.js";
 const project = "irobotxsite",
@@ -132,37 +133,22 @@ await patch({
 const receiver = await provision("XRPL_TESTNET_RECEIVER_SEED", "receiver");
 await patch({ receiver, provisioning: "funding" });
 for (const [role, w] of Object.entries({ trader, receiver })) {
-  let a = await rpc("account_info", {
-    account: w.address,
-    ledger_index: "validated",
+  const account = await ensureFunded(w.address, {
+    account: (address) =>
+      rpc("account_info", { account: address, ledger_index: "validated" }),
+    faucet: async (address) =>
+      (
+        await fetch("https://faucet.altnet.rippletest.net/accounts", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ destination: address }),
+          signal: AbortSignal.timeout(60000),
+        })
+      ).ok,
+    wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   });
-  if (a.error === "actNotFound") {
-    const funded = await fetch(
-      "https://faucet.altnet.rippletest.net/accounts",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ destination: w.address }),
-        signal: AbortSignal.timeout(60000),
-      },
-    );
-    if (!funded.ok)
-      throw new Error(
-        `Faucet unavailable (${funded.status}) for ${role}; rerun safely to resume.`,
-      );
-    for (let i = 0; i < 12; i++) {
-      a = await rpc("account_info", {
-        account: w.address,
-        ledger_index: "validated",
-      });
-      if (a.account_data) break;
-      await new Promise((r) => setTimeout(r, 2000));
-    }
-  }
-  if (!a.account_data)
-    throw new Error(`Funding not yet validated for ${role}; rerun to resume.`);
   console.log(
-    `${role}: ${w.address}; validated balance ${Number(a.account_data.Balance) / 1e6} test XRP`,
+    `${role}: ${w.address}; validated balance ${Number(account.Balance) / 1e6} test XRP`,
   );
 }
 await patch({ provisioning: "ready" });

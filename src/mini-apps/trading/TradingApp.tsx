@@ -20,7 +20,9 @@ import "./trading.css";
 const fmt = (s?: string) =>
   s === undefined
     ? "—"
-    : Number(s).toLocaleString(undefined, { maximumFractionDigits: 8 });
+    : Number(s) !== 0 && Math.abs(Number(s)) < 0.00000001
+      ? s
+      : Number(s).toLocaleString(undefined, { maximumFractionDigits: 8 });
 const time = (n?: number) => (n ? new Date(n).toLocaleString() : "Not yet");
 const explorer = (type: "accounts" | "transactions", value: string) =>
   `https://testnet.xrpl.org/${type}/${value}`;
@@ -416,21 +418,26 @@ export default function TradingApp() {
                   disabled={
                     busy ||
                     (!data.enabled &&
-                      (!!data.pending ||
-                        !data.market?.eligible ||
+                      !data.pending &&
+                      (!data.market?.eligible ||
                         Number(data.position.quantity) > 0))
                   }
                   onClick={() =>
                     void perform(
-                      () => tradingApi.automation(!data.enabled),
-                      data.enabled
+                      () =>
+                        tradingApi.automation(!(data.enabled || data.pending)),
+                      data.enabled || data.pending
                         ? "Paused. Submitted transactions will still reconcile."
                         : "Bounded run enabled; it continues with the browser closed.",
                     )
                   }
                 >
                   {data.enabled ? <Pause size={16} /> : <Play size={16} />}{" "}
-                  {data.enabled ? "Pause run" : "Start three-cycle test"}
+                  {data.enabled
+                    ? "Pause run"
+                    : data.pending
+                      ? "Pause submissions"
+                      : "Start three-cycle test"}
                 </button>
                 <p className="xt-muted">
                   Pause prevents new submissions. Transactions already submitted
@@ -462,7 +469,7 @@ export default function TradingApp() {
                       <th>Action / time</th>
                       <th>Status</th>
                       <th>Actual result</th>
-                      <th>Ledger proof</th>
+                      <th>Transaction hash</th>
                     </tr>
                   </thead>
                   <tbody>

@@ -21,6 +21,10 @@ export function assetValid(a) {
   return (
     a &&
     /^(?!XRP$)([A-Za-z0-9]{3}|[A-F0-9]{40})$/.test(a.currency) &&
+    ![
+      "0000000000000000000000000000000000000000",
+      "0000000000000000000000005852500000000000",
+    ].includes(a.currency) &&
     isValidClassicAddress(a.issuer)
   );
 }

@@ -1,3 +1,4 @@
+import { ensureFunded } from "../testnet/provisioning.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -95,4 +96,48 @@ test("Nonvalidated response is never successful", () => {
 
 test("Selling a canonical 16-digit ledger holding does not create rounding dust", () => {
   assert.equal(issued("0.00002461630446795893"), "0.00002461630446795893");
+});
+
+test("Provisioning waits for faucet validation and reuses an already-funded address", async () => {
+  let polls = 0,
+    faucets = 0,
+    waits = 0;
+  const account = async () =>
+    ++polls >= 4
+      ? { account_data: { Balance: "100000000" } }
+      : { error: "actNotFound" };
+  const faucet = async (address) => {
+    assert.equal(address, "public-address");
+    faucets++;
+    return true;
+  };
+  const wait = async () => {
+    waits++;
+  };
+  assert.equal(
+    (await ensureFunded("public-address", { account, faucet, wait })).Balance,
+    "100000000",
+  );
+  assert.equal(faucets, 1);
+  assert.equal(waits, 2);
+  await ensureFunded("public-address", { account, faucet, wait });
+  assert.equal(faucets, 1);
+});
+test("Faucet unavailability and delayed funding report resumable failures", async () => {
+  const account = async () => ({ error: "actNotFound" }),
+    wait = async () => {};
+  await assert.rejects(
+    () => ensureFunded("address", { account, wait, faucet: async () => false }),
+    /same address/,
+  );
+  await assert.rejects(
+    () =>
+      ensureFunded("address", {
+        account,
+        wait,
+        faucet: async () => true,
+        attempts: 2,
+      }),
+    /not yet validated/,
+  );
 });

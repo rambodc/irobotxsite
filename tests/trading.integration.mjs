@@ -62,7 +62,7 @@ function ledgerFetch() {
               reserve_base_xrp: 1,
               reserve_inc_xrp: 0.2,
             },
-            complete_ledgers: gap ? `999-${ledgerIndex}` : `1-${ledgerIndex}`,
+            complete_ledgers: gap ? `1002-${ledgerIndex}` : `1-${ledgerIndex}`,
           },
         };
         break;
@@ -196,7 +196,7 @@ async function call(name, data, token) {
   );
   return r.json();
 }
-await seed(owner);
+const ownerToken = await seed(owner);
 const other = await seed("other-admin");
 test("Owner-only Testnet API and durable engine", async (t) => {
   await t.test(
@@ -215,6 +215,29 @@ test("Owner-only Testnet API and durable engine", async (t) => {
           "PERMISSION_DENIED",
         );
       }
+    },
+  );
+  await t.test(
+    "Browser Firestore reads and writes remain denied to the owner",
+    async () => {
+      const url = `http://127.0.0.1:8080/v1/projects/demo-irobotx/databases/(default)/documents/xrplTestnet/${owner}`;
+      const headers = {
+        Authorization: `Bearer ${ownerToken}`,
+        "Content-Type": "application/json",
+      };
+      assert.equal((await realFetch(url, { headers })).status, 403);
+      assert.equal(
+        (
+          await realFetch(url, {
+            method: "PATCH",
+            headers,
+            body: JSON.stringify({
+              fields: { enabled: { booleanValue: true } },
+            }),
+          })
+        ).status,
+        403,
+      );
     },
   );
   ledgerFetch();
@@ -397,17 +420,14 @@ test("Owner-only Testnet API and durable engine", async (t) => {
         .collection("payloads")
         .doc("persisted-request")
         .set({ blob: signed.tx_blob });
-      await rootRef()
-        .collection("intents")
-        .doc("persisted-request")
-        .update({
-          status: "signing",
-          hash: signed.hash,
-          sequence: 10,
-          firstLedger: 1000,
-          lastLedger: 1004,
-          quoteAt: Date.now(),
-        });
+      await rootRef().collection("intents").doc("persisted-request").update({
+        status: "signing",
+        hash: signed.hash,
+        sequence: 10,
+        firstLedger: 1000,
+        lastLedger: 1004,
+        quoteAt: Date.now(),
+      });
       await processPending({ sleep: async () => {} });
       const result = (
         await rootRef().collection("intents").doc("persisted-request").get()
@@ -453,6 +473,27 @@ test("Owner-only Testnet API and durable engine", async (t) => {
         ).data().error,
         /reset/,
       );
+    },
+  );
+  await t.test(
+    "A gap in ledger history keeps an ambiguous transaction pending",
+    async () => {
+      await reset();
+      simulateTimeout = true;
+      await enqueue("payment", "history-gap-request");
+      await processPending({ signer: trader, sleep: async () => {} });
+      submitted.clear();
+      sequence = 10;
+      ledgerIndex = 1010;
+      gap = true;
+      await processPending({ signer: trader, sleep: async () => {} });
+      assert.equal(
+        (
+          await rootRef().collection("intents").doc("history-gap-request").get()
+        ).data().status,
+        "pending",
+      );
+      assert.equal(submits, 1);
     },
   );
   global.fetch = realFetch;

@@ -18,6 +18,7 @@ import {
 const token = execFileSync("gcloud", ["auth", "print-access-token"], {
   encoding: "utf8",
 }).trim();
+process.env.GOOGLE_CLOUD_QUOTA_PROJECT = "irobotxsite";
 const app = initializeApp({ projectId: "irobotxsite" });
 app.options.credential.getAccessToken = async () => ({
   access_token: token,

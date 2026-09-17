@@ -795,7 +795,12 @@ export async function processPending(deps = {}) {
       throw new Error("Buy quote moved beyond the fresh price limit.");
     if (i.action === "sell" && D(original.TakerPays).lt(freshTx.TakerPays))
       throw new Error("Sell quote moved beyond the fresh price limit.");
-    const allowed = await mutate(lease, (t, r, ref, state, intent) => {
+    const allowed = await mutate(lease, async (t, r, ref, state, intent) => {
+      const profile = await t.get(
+        getFirestore().doc(`users/${tradingOwner()}`),
+      );
+      if (!canTrade(tradingOwner(), profile.data()))
+        throw new Error("Trading owner access is disabled.");
       if (
         state.revision !== intent.revision ||
         (intent.automatic && !state.enabled)

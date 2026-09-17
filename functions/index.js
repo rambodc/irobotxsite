@@ -406,6 +406,6 @@ export const submitContact = endpoint(mailBase, async (request) => {
 
 export { demoChat } from './demo-ai.js';
 
-import { createTradingHandlers } from './trading/service.js';
-export const { tradingDashboard, tradingConfigure, tradingAutomation, tradingHistory } = createTradingHandlers({ endpoint, base, current, rate });
-export { tradingTick } from './trading/service.js';
+import { createTestnetHandlers } from './testnet/service.js';
+export const { testnetDashboard, testnetDiscover, testnetRequest, testnetAutomation, testnetHistory } = createTestnetHandlers({ endpoint, base, current, rate });
+export { testnetWorker, testnetTick } from './testnet/service.js';

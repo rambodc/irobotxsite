@@ -6,18 +6,6 @@
       "fieldPath": "expiresAt",
       "ttl": true,
       "indexes": []
-    },
-    {
-      "collectionGroup": "samples",
-      "fieldPath": "expiresAt",
-      "ttl": true,
-      "indexes": []
-    },
-    {
-      "collectionGroup": "decisions",
-      "fieldPath": "expiresAt",
-      "ttl": true,
-      "indexes": []
     }
   ]
 }

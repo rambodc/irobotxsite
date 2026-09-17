@@ -3,49 +3,176 @@ import assert from "node:assert/strict";
 import { initializeApp } from "../functions/node_modules/firebase-admin/lib/app/index.js";
 import { getAuth } from "../functions/node_modules/firebase-admin/lib/auth/index.js";
 import { getFirestore } from "../functions/node_modules/firebase-admin/lib/firestore/index.js";
-import { runTradingTick } from "../functions/trading/service.js";
-import { tradingOwner } from "../functions/trading/access.js";
 import {
-  initialConfig,
-  defaultPair,
-  emptyPortfolio,
-} from "../functions/trading/engine.js";
+  Wallet,
+  decode,
+  hashes,
+} from "../functions/node_modules/xrpl/dist/npm/index.js";
+import {
+  ensureState,
+  rootRef,
+  enqueue,
+  automation,
+  processPending,
+  takeLease,
+  finish,
+} from "../functions/testnet/service.js";
+import { tradingOwner } from "../functions/trading/access.js";
 if (
   !process.env.FIRESTORE_EMULATOR_HOST ||
   !process.env.FIREBASE_AUTH_EMULATOR_HOST
 )
   throw new Error("Emulators required.");
+process.env.FUNCTIONS_EMULATOR = "true";
 initializeApp({ projectId: "demo-irobotx" });
-const db = getFirestore(),
-  auth = getAuth(),
+const auth = getAuth(),
+  db = getFirestore(),
   owner = tradingOwner(),
-  pair = defaultPair(),
-  root = db.doc(`users/${owner}/miniApps/trading`);
-const password = "Testing-password-123!";
-async function seed(uid, email, role = "admin") {
-  await auth.createUser({ uid, email, password });
-  await db
-    .doc(`users/${uid}`)
-    .set({
-      email,
-      name: "Trading Test",
-      company: "iRobotX",
-      role,
-      status: "active",
-      apps: [],
-    });
-  const response = await fetch(
+  trader = Wallet.generate(),
+  recipient = Wallet.generate();
+const realFetch = global.fetch;
+let sequence = 10,
+  submitted = new Map(),
+  submits = 0,
+  simulateTimeout = false,
+  network = 1,
+  ledgerIndex = 1000,
+  hook = null;
+function ledgerFetch() {
+  global.fetch = async (url, opts) => {
+    if (!String(url).startsWith("https://s.altnet."))
+      return realFetch(url, opts);
+    const {
+      method,
+      params: [p],
+    } = JSON.parse(opts.body);
+    let result = {};
+    const now = Math.floor(Date.now() / 1000) - 946684800;
+    switch (method) {
+      case "server_info":
+        result = {
+          info: {
+            network_id: network,
+            validated_ledger: {
+              hash: "A".repeat(64),
+              seq: ledgerIndex,
+              reserve_base_xrp: 1,
+              reserve_inc_xrp: 0.2,
+            },
+            complete_ledgers: `1-${ledgerIndex}`,
+          },
+        };
+        break;
+      case "ledger":
+        result = { validated: true, ledger: { close_time: now } };
+        break;
+      case "account_info":
+        result = {
+          account_data: {
+            Balance: "100000000",
+            OwnerCount: 0,
+            Sequence: sequence,
+            Flags: 8388608,
+          },
+        };
+        break;
+      case "account_lines":
+        result = { lines: [] };
+        break;
+      case "fee":
+        result = { drops: { open_ledger_fee: "10" } };
+        break;
+      case "submit": {
+        submits++;
+        const tx = decode(p.tx_blob);
+        const hash = hashes.hashSignedTx(p.tx_blob);
+        submitted.set(hash, tx);
+        sequence++;
+        if (hook) await hook();
+        if (simulateTimeout) throw new Error("Network response lost.");
+        result = { engine_result: "tesSUCCESS" };
+        break;
+      }
+      case "tx": {
+        const tx = submitted.get(p.transaction);
+        result =
+          tx && !simulateTimeout
+            ? {
+                validated: true,
+                tx_json: { ...tx, date: now },
+                ledger_index: ledgerIndex,
+                meta: {
+                  TransactionResult: "tesSUCCESS",
+                  AffectedNodes: [
+                    {
+                      ModifiedNode: {
+                        LedgerEntryType: "AccountRoot",
+                        PreviousFields: { Balance: "100000000" },
+                        FinalFields: {
+                          Account: trader.classicAddress,
+                          Balance: "98999988",
+                        },
+                      },
+                    },
+                  ],
+                },
+              }
+            : { error: "txnNotFound", searched_all: true };
+        break;
+      }
+      default:
+        throw new Error("Unexpected mocked RPC " + method);
+    }
+    return { ok: true, json: async () => ({ result }) };
+  };
+}
+async function reset() {
+  await db.recursiveDelete(rootRef());
+  await rootRef().set({
+    network: "testnet",
+    networkId: 1,
+    provisioning: "ready",
+    trader: {
+      address: trader.classicAddress,
+      secretVersion:
+        "projects/irobotxsite/secrets/XRPL_TESTNET_TRADER_SEED/versions/1",
+    },
+    receiver: { address: recipient.classicAddress },
+  });
+  await ensureState();
+  sequence = 10;
+  submitted = new Map();
+  submits = 0;
+  simulateTimeout = false;
+  network = 1;
+  ledgerIndex = 1000;
+  hook = null;
+  await auth.updateUser(owner, { disabled: false });
+  await db.doc(`users/${owner}`).set({ status: "active", role: "admin" });
+}
+async function seed(uid) {
+  await auth.createUser({
+    uid,
+    email: `${uid}@example.com`,
+    password: "Testing-password-123!",
+  });
+  await db.doc(`users/${uid}`).set({ status: "active", role: "admin" });
+  const r = await realFetch(
     "http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=fake",
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password, returnSecureToken: true }),
+      body: JSON.stringify({
+        email: `${uid}@example.com`,
+        password: "Testing-password-123!",
+        returnSecureToken: true,
+      }),
     },
   );
-  return (await response.json()).idToken;
+  return (await r.json()).idToken;
 }
-async function call(name, data = {}, token) {
-  const res = await fetch(
+async function call(name, data, token) {
+  const r = await realFetch(
     `http://127.0.0.1:5001/demo-irobotx/us-central1/${name}`,
     {
       method: "POST",
@@ -56,260 +183,189 @@ async function call(name, data = {}, token) {
       body: JSON.stringify({ data }),
     },
   );
-  return res.json();
+  return r.json();
 }
-let minute = 30000000;
-const time = () => minute * 60000 + 5000;
-const quote = () => ({
-  pairId: pair.id,
-  at: time(),
-  ledger: minute,
-  bid: "2",
-  ask: "2.001",
-  bids: [{ price: "2", quantity: "10000" }],
-  asks: [{ price: "2.001", quantity: "10000" }],
-});
-async function warm() {
-  await root
-    .collection("markets")
-    .doc(pair.id)
-    .set({
-      ...quote(),
-      history: Array.from({ length: 5 }, (_, i) => ({
-        minute: minute - 5 + i,
-        ledger: minute - 5 + i,
-        mid: "1.99",
-        at: time() - (5 - i) * 60000,
-      })),
-    });
-}
-test("Trading authorization, persistence and scheduled execution", async (t) => {
-  const token = await seed(owner, "trading-owner@example.com"),
-    other = await seed("other-admin", "other-admin@example.com");
+await seed(owner);
+const other = await seed("other-admin");
+test("Owner-only Testnet API and durable engine", async (t) => {
   await t.test(
-    "all trading callables reject anonymous and other admin users",
+    "All callable interfaces reject anonymous and other administrator",
     async () => {
-      for (const endpoint of [
-        "tradingDashboard",
-        "tradingConfigure",
-        "tradingAutomation",
-        "tradingHistory",
+      for (const name of [
+        "testnetDashboard",
+        "testnetDiscover",
+        "testnetRequest",
+        "testnetAutomation",
+        "testnetHistory",
       ]) {
-        assert.equal((await call(endpoint)).error.status, "UNAUTHENTICATED");
+        assert.equal((await call(name, {})).error.status, "UNAUTHENTICATED");
         assert.equal(
-          (await call(endpoint, {}, other)).error.status,
+          (await call(name, {}, other)).error.status,
           "PERMISSION_DENIED",
         );
       }
-      const p = (await call("getProfile", {}, token)).result;
-      assert.ok(p.miniApps.includes("trading"));
-      assert.ok(
-        !(await call("getProfile", {}, other)).result.miniApps.includes(
-          "trading",
-        ),
-      );
     },
   );
+  ledgerFetch();
   await t.test(
-    "dashboard initializes paused and saves owner configuration",
+    "Duplicate requests create exactly one intent and cannot mutate action",
     async () => {
-      const d = (await call("tradingDashboard", {}, token)).result;
-      assert.equal(d.config.enabled, false);
-      assert.equal(d.portfolios[0].cash, "10000");
-      assert.equal(
-        (await call("tradingAutomation", { enabled: true }, token)).result
-          .enabled,
-        true,
-      );
-      assert.equal(
-        (
-          await call(
-            "tradingConfigure",
-            { action: "rules", rules: initialConfig().rules },
-            token,
-          )
-        ).result.enabled,
-        false,
-      );
-      assert.equal(
-        (await call("tradingAutomation", { enabled: "true" }, token)).error
-          .status,
-        "INVALID_ARGUMENT",
-      );
-    },
-  );
-  await t.test("browser Firestore access stays denied", async () => {
-    const result = await fetch(
-      `http://127.0.0.1:8080/v1/projects/demo-irobotx/databases/(default)/documents/users/${owner}/miniApps/trading`,
-      { headers: { Authorization: `Bearer ${token}` } },
-    );
-    assert.equal(result.status, 403);
-  });
-  await t.test(
-    "pair changes preserve portfolios and pause execution",
-    async () => {
-      const added = (
-        await call(
-          "tradingConfigure",
-          {
-            action: "addPair",
-            base: { currency: "USD", issuer: pair.quote.issuer },
-            quote: "XRP",
-          },
-          token,
-        )
-      ).result;
-      assert.equal(added.pairs.length, 2);
-      assert.equal(added.enabled, false);
-      const id = added.pairs[1].id;
-      await root
-        .collection("portfolios")
-        .doc(id)
-        .set({ ...emptyPortfolio(), cash: "9990" });
-      await call(
-        "tradingConfigure",
-        { action: "removePair", pairId: id },
-        token,
-      );
-      assert.equal(
-        (await root.collection("portfolios").doc(id).get()).data().cash,
-        "9990",
-      );
-      assert.equal(
-        (
-          await call(
-            "tradingConfigure",
-            {
-              action: "addPair",
-              base: { currency: "USD", issuer: "rInvalid" },
-              quote: "XRP",
-            },
-            token,
-          )
-        ).error.status,
-        "INVALID_ARGUMENT",
-      );
-    },
-  );
-  await t.test(
-    "runs with no browser; replay and overlap cannot duplicate fills",
-    async () => {
-      await call("tradingAutomation", { enabled: true }, token);
-      await warm();
-      const feed = async () => [quote()];
+      await reset();
       await Promise.all([
-        runTradingTick({ db, auth, feed, now: time }),
-        runTradingTick({ db, auth, feed, now: time }),
+        enqueue("payment", "duplicate-request"),
+        enqueue("payment", "duplicate-request"),
       ]);
-      assert.equal((await root.collection("trades").get()).size, 1);
-      const result = await runTradingTick({ db, auth, feed, now: time });
-      assert.equal(result.skipped, true);
-      assert.equal((await root.collection("trades").get()).size, 1);
-      const dashboard = (await call("tradingDashboard", {}, token)).result;
-      assert.ok(Number(dashboard.portfolios[0].quantity) > 0);
+      assert.equal((await rootRef().collection("intents").get()).size, 1);
+      await assert.rejects(() => enqueue("buy", "duplicate-request"));
+    },
+  );
+  await t.test(
+    "Overlapping workers acquire only one durable lease",
+    async () => {
+      await reset();
+      await enqueue("payment", "lease-request");
+      const leases = await Promise.all([takeLease(), takeLease()]);
+      assert.equal(leases.filter(Boolean).length, 1);
+    },
+  );
+  await t.test(
+    "Payment is signed, persisted, submitted once and validated from metadata",
+    async () => {
+      await reset();
+      await enqueue("payment", "payment-request");
+      await processPending({ signer: trader, sleep: async () => {} });
+      const i = (
+        await rootRef().collection("intents").doc("payment-request").get()
+      ).data();
+      assert.equal(i.status, "validated");
+      assert.equal(i.result.fee, "0.000012");
+      assert.equal(i.result.xrpChange, "-1.000012");
+      assert.equal(submits, 1);
+      assert.ok(
+        (
+          await rootRef().collection("payloads").doc("payment-request").get()
+        ).data().blob,
+      );
+      await processPending({ signer: trader });
+      assert.equal(submits, 1);
+    },
+  );
+  await t.test("Pause before submission cancels queued intent", async () => {
+    await reset();
+    await enqueue("payment", "pause-request");
+    await automation(false);
+    await processPending({ signer: trader, sleep: async () => {} });
+    assert.equal(submits, 0);
+    assert.equal(
+      (await rootRef().collection("intents").doc("pause-request").get()).data()
+        .status,
+      "cancelled",
+    );
+  });
+  await t.test(
+    "Pause after submit retains validated result and stops future work",
+    async () => {
+      await reset();
+      await enqueue("payment", "pause-after-request");
+      hook = () => automation(false);
+      await processPending({ signer: trader, sleep: async () => {} });
+      assert.equal(submits, 1);
       assert.equal(
-        (await call("tradingHistory", {}, token)).result.trades.length,
-        1,
+        (
+          await rootRef().collection("intents").doc("pause-after-request").get()
+        ).data().status,
+        "validated",
+      );
+      assert.equal((await rootRef().get()).data().enabled, false);
+    },
+  );
+  await t.test(
+    "Lost submit response remains pending; retry reconciles without another submission",
+    async () => {
+      await reset();
+      simulateTimeout = true;
+      await enqueue("payment", "timeout-request");
+      await processPending({ signer: trader, sleep: async () => {} });
+      assert.equal(
+        (
+          await rootRef().collection("intents").doc("timeout-request").get()
+        ).data().status,
+        "pending",
+      );
+      simulateTimeout = false;
+      await processPending({ signer: trader, sleep: async () => {} });
+      assert.equal(submits, 1);
+      assert.equal(
+        (
+          await rootRef().collection("intents").doc("timeout-request").get()
+        ).data().status,
+        "validated",
       );
     },
   );
-  await t.test("Pause during market fetch blocks a pending fill", async () => {
-    minute++;
-    await warm();
-    let release, entered;
-    const gate = new Promise((r) => (release = r));
-    const started = new Promise((r) => (entered = r));
-    const running = runTradingTick({
-      db,
-      auth,
-      now: time,
-      feed: async () => {
-        entered();
-        await gate;
-        return [quote()];
-      },
-    });
-    await started;
-    await call("tradingAutomation", { enabled: false }, token);
-    release();
-    await running;
-    assert.equal((await root.collection("trades").get()).size, 1);
-    assert.equal((await root.get()).data().enabled, false);
+  await t.test(
+    "Definitive expiry releases a transaction never seen on ledger",
+    async () => {
+      await reset();
+      simulateTimeout = true;
+      await enqueue("payment", "expiry-request");
+      await processPending({ signer: trader, sleep: async () => {} });
+      submitted.clear();
+      sequence = 10;
+      ledgerIndex = 1010;
+      await processPending({ signer: trader, sleep: async () => {} });
+      assert.equal(submits, 1);
+      assert.equal(
+        (
+          await rootRef().collection("intents").doc("expiry-request").get()
+        ).data().status,
+        "expired",
+      );
+    },
+  );
+  await t.test("Network mismatch never signs or submits", async () => {
+    await reset();
+    network = 0;
+    await enqueue("payment", "network-request");
+    await processPending({ signer: trader, sleep: async () => {} });
+    assert.equal(submits, 0);
+    assert.equal((await rootRef().collection("payloads").get()).size, 0);
   });
-  await t.test("enabled run respects a newly disabled account", async () => {
-    minute++;
-    await call("tradingAutomation", { enabled: true }, token);
-    await warm();
-    await runTradingTick({
-      db,
-      auth,
-      now: time,
-      feed: async () => {
-        await db.doc(`users/${owner}`).update({ status: "disabled" });
-        return [quote()];
-      },
-    });
-    assert.equal((await root.collection("trades").get()).size, 1);
-    assert.equal(
-      (await call("tradingDashboard", {}, token)).error.status,
-      "PERMISSION_DENIED",
-    );
-    await db.doc(`users/${owner}`).update({ status: "active" });
+  await t.test("Disabled owner prevents worker execution", async () => {
+    await reset();
+    await enqueue("payment", "disabled-request");
+    await auth.updateUser(owner, { disabled: true });
+    await processPending({ signer: trader, sleep: async () => {} });
+    assert.equal(submits, 0);
   });
   await t.test(
-    "failed feed produces WAIT and leaves balances unchanged",
+    "Actual partial sell preserves residual cost basis and prevents another buy",
     async () => {
-      minute++;
-      const result = await runTradingTick({
-        db,
-        auth,
-        now: time,
-        feed: async () => {
-          throw new Error("Test feed offline");
+      await reset();
+      await rootRef().update({
+        position: {
+          quantity: "2",
+          cost: "1",
+          realized: "0",
+          tradingFees: "0",
+          setupFees: "0",
         },
+        asset: { currency: "USD", issuer: recipient.classicAddress },
       });
-      assert.equal(result.error, "Test feed offline");
-      assert.equal(
-        (await root.collection("system").doc("health").get()).data().decision
-          .side,
-        "WAIT",
-      );
-      assert.equal((await root.collection("trades").get()).size, 1);
+      await enqueue("sell", "partial-request");
+      const lease = await takeLease();
+      await finish(lease, "validated", null, {
+        fee: ".00001",
+        tokenChange: "-1",
+        tradeXrp: ".49",
+        result: "tesSUCCESS",
+      });
+      const p = (await rootRef().get()).data().position;
+      assert.equal(p.quantity, "1");
+      assert.equal(p.cost, "0.5");
+      assert.equal(p.realized, "-0.01001");
+      await assert.rejects(() => enqueue("buy", "another-buy-request"));
     },
   );
-  await t.test(
-    "missing liquidity resets samples and blocks execution",
-    async () => {
-      minute++;
-      await runTradingTick({
-        db,
-        auth,
-        now: time,
-        feed: async () => [{ ...quote(), bids: [], bid: "0" }],
-      });
-      assert.deepEqual(
-        (await root.collection("markets").doc(pair.id).get()).data().history,
-        [],
-      );
-      assert.equal((await root.collection("trades").get()).size, 1);
-    },
-  );
-  await t.test("trade pagination is stable at equal timestamps", async () => {
-    const batch = db.batch();
-    for (let i = 1; i <= 30; i++)
-      batch.set(root.collection("trades").doc(`${pair.id}-${i}`), {
-        at: 1,
-        pairId: pair.id,
-      });
-    await batch.commit();
-    const first = (await call("tradingHistory", {}, token)).result,
-      second = (await call("tradingHistory", { cursor: first.cursor }, token))
-        .result;
-    assert.equal(first.trades.length, 25);
-    assert.equal(second.trades.length, 6);
-    assert.equal(
-      new Set([...first.trades, ...second.trades].map((t) => t.id)).size,
-      31,
-    );
-  });
+  global.fetch = realFetch;
 });

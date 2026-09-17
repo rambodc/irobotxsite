@@ -321,7 +321,7 @@ export default function Portal({ path }: { path: string }) {
                 </div>
                 <ArrowUpRight className="ix-tile-arrow" size={19} />
                 {item.id === "trading" && (
-                  <span className="ix-app-tag">PAPER TRADING</span>
+                  <span className="ix-app-tag">TESTNET</span>
                 )}
               </Link>
             ))}

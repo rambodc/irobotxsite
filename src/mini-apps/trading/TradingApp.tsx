@@ -432,7 +432,7 @@ export default function TradingApp() {
                     )
                   }
                 >
-                  {data.enabled ? <Pause size={16} /> : <Play size={16} />}{" "}
+                  {data.enabled || data.pending ? <Pause size={16} /> : <Play size={16} />}{" "}
                   {data.enabled
                     ? "Pause run"
                     : data.pending

@@ -1,3 +1,4 @@
+import { miniApps } from './trading/access.js';
 export const APP_IDS = ["oil-gas", "robotics", "fintech"];
 export function text(value, max, required = true) {
   if (
@@ -49,6 +50,7 @@ export function publicProfile(uid, p) {
     role: p.role,
     status: p.status,
     apps: p.apps || [],
+    miniApps: miniApps(uid, p),
     ...(p.invitationDelivery
       ? { invitationDelivery: p.invitationDelivery }
       : {}),

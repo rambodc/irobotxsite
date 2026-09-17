@@ -92,7 +92,7 @@ Six cinematic images were generated with the built-in image generation tool. Ori
 
 `public/brand/` includes transparent blue, white and monochrome iX marks, horizontal lockups, square/circular versions, and PNG exports. `scripts/brand-assets.mjs` defines the shared SVG geometry. The same mark appears in the public footer, authentication, the portal, the favicon and social card. Treat background marks as decorative; retain meaningful alternative text for the cinematic images.
 
-Home prioritizes custom Oil & Gas platforms and tailored AI integration. About preserves Oil & Gas, Robotics and FinTech anchors. Demo opens a full-screen fictional employee workspace with Profile, Company, Employees, AI Chat, and Well Viewer. The private portal retains its stable application IDs and coming-soon status.
+Home prioritizes custom Oil & Gas platforms and tailored AI integration. About preserves Oil & Gas, Robotics and FinTech anchors. Demo opens a full-screen fictional employee workspace with Profile, Company, Employees, AI Chat, and Well Viewer. The private portal uses a mini-app launcher; existing industry application assignment IDs are preserved.
 
 ## Interactive demo
 
@@ -120,3 +120,31 @@ The Well Viewer is adapted from `rambodc/uniq` production commit `1030fce0f65aaf
 Release AI backend changes through `production` with Functions first, then Hosting; unchanged Firestore rules are skipped automatically. For rollback, restore the prior production commit and redeploy the changed components. Removing AI UI alone can be released as Hosting only; disable the AI endpoints separately if retiring them.
 
 Launcher artwork is generated with the built-in image tool and served as five 300 × 300 WebP images in `public/images/apps/` (about 50 KB combined). Exact prompts are in `assets/artwork/app-icons-prompts.json`. Profile portraits remain inside employee/profile screens. The chat composer uses 16px text to prevent iPhone focus zoom while preserving user-controlled page zoom.
+
+
+## Authenticated mini apps and XRP paper trading
+
+`/portal` is the private iRobotX mini-app launcher. Account, Contact Team and User Access retain their original `/portal/account`, `/portal/contact` and `/portal/admin` addresses. The public site and `/demo` are unchanged. The typed registry and private shell are in `src/portal`; isolated app components are in `src/mini-apps`. Trading is lazy-loaded at `/portal/trading`.
+
+Trading access is limited to the active Firebase account identified by `TRADING_OWNER_UID` (default: the existing Rambod account UID in `functions/trading/access.js`). The server returns permitted mini apps with the portal profile, and every trading callable checks the current account and owner UID. Administrator status alone does not grant Trading access. App Check enforcement is inherited from the existing callable configuration. Browser Firestore access remains denied.
+
+This is **paper trading only**. No wallet keys, transaction signing, real orders, AI, or news feeds are implemented. A scheduled function `tradingTick` samples up to five direct XRPL books every minute after the owner first opens the app. It collects markets even when trading is paused. `tradingDashboard`, `tradingConfigure`, `tradingAutomation` and `tradingHistory` are the private interfaces. Settings and all calculations are authoritative on the server. The browser refreshes every 15 seconds while visible.
+
+Data lives under `users/{uid}/miniApps/trading`: configuration in the app document; `markets` for the latest book and 60 consecutive samples; `portfolios` for per-pair balances; `samples` and `decisions` with seven-day TTL; `trades` for retained fills; and `system` for the worker lease and heartbeat. Removed pairs retain their portfolio and trade history. History is paginated by timestamp and document ID. Monetary values are decimal strings, computed with decimal.js, and shown in the pair's quote asset. Custom token identity is the case-sensitive currency code plus checksum-validated issuer, with XRP or the official RLUSD issuer as quote asset.
+
+Each pair starts with 10,000 simulated quote units. One selected pair can trade at a time. The strategy compares the current midpoint with the prior five consecutive one-minute midpoints: buy at +0.15%, sell at -0.15%, otherwise wait. Default maximum order is 100 quote units, maximum position 1,000, maximum spread 0.5%, and cooldown 60 seconds. Setting changes pause automation. Simulated fills walk available funded book levels within 0.5% of the best price, with a 0.1% modeled fee. Only held assets can be sold. Cost basis uses weighted average; unrealized P/L estimates a sale at the best bid less the modeled exit fee, and is not a depth-aware executable valuation. AMM routing, issuer transfer fees, reserves and actual network costs are excluded.
+
+Validated ledger headers and matching book hashes/indices are required. Stale quotes, unhealthy books, missed samples and unavailable feeds cause WAIT; six consecutive samples are needed again after a gap. Decimal arithmetic, cash/position limits, a 55-second worker lease and per-pair ledger idempotency protect the simulator. Settings revision and account status are rechecked in the fill transaction, so a successfully committed Pause blocks any later fill. Closing the app, returning to the launcher, or signing out does not pause the backend. The authenticated dashboard shows worker attempts, evaluations, last success and errors.
+
+Validation:
+
+```sh
+npm run test:trading
+npm run test:backend
+PATH="/opt/homebrew/opt/openjdk@21/bin:$PATH" npm run test:trading:integration
+npm run build
+```
+
+Use Node 22. Emulator tests use only `demo-irobotx` and check callable authorization, Firestore denial, persistence, concurrent runs, Pause during a pending feed request, account revocation and trade pagination. The production pipeline deploys TTL configuration before Functions and Hosting. `tradingTick` uses Cloud Scheduler; deployment needs Cloud Scheduler API enabled and the deployment identity's scheduler job management permission. Automation defaults to off. Monitor the private dashboard and Cloud Logging for `tradingTick` failures.
+
+Future work stays inside this mini app: timestamped news, evaluated AI signals, a dedicated testnet wallet with a Secret Manager-backed server signer, then separately enabled mainnet execution with reconciliation and loss limits.

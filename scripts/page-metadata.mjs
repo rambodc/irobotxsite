@@ -39,6 +39,7 @@ for (const route of [
   "portal/account",
   "portal/contact",
   "portal/admin",
+  "portal/trading",
 ]) {
   if (route.includes("/"))
     mkdirSync(`dist/${route.split("/")[0]}`, { recursive: true });

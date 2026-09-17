@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { lazy, Suspense, useEffect, useState, type FormEvent } from "react";
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -6,22 +6,18 @@ import {
   verifyPasswordResetCode,
   confirmPasswordReset,
 } from "firebase/auth";
-import {
-  ArrowLeft,
-  ArrowUpRight,
-  LayoutGrid,
-  UserRound,
-  UsersRound,
-  Mail,
-  LogOut,
-  LockKeyhole,
-  Search,
-  RefreshCw,
-} from "lucide-react";
+import { ArrowLeft, ArrowUpRight, LogOut, LockKeyhole } from "lucide-react";
 import { auth, verifyBrowser } from "./firebaseClient";
-import { api, errorMessage, type Profile, type AppId } from "./api";
-import { ContactForm, Link, Logo, Mark, navigate } from "./App";
-import { demos } from "./content";
+import { api, errorMessage, type Profile } from "./api";
+import { Link, Logo, Mark, navigate } from "./App";
+import { MINI_APPS, visibleMiniApps, canOpenApp } from "./portal/miniApps";
+import "./portal/portal.css";
+const Account = lazy(() => import("./mini-apps/account/AccountApp"));
+const Admin = lazy(() => import("./mini-apps/user-access/UserAccessApp"));
+const ContactTeam = lazy(
+  () => import("./mini-apps/contact-team/ContactTeamApp"),
+);
+const Trading = lazy(() => import("./mini-apps/trading/TradingApp"));
 function AuthPage({ path }: { path: string }) {
   const action = path === "/accept-invite" || path === "/auth/action";
   const reset = path === "/forgot-password";
@@ -190,311 +186,6 @@ function AuthPage({ path }: { path: string }) {
     </main>
   );
 }
-function Account({
-  profile,
-  onUpdate,
-}: {
-  profile: Profile;
-  onUpdate: (p: Profile) => void;
-}) {
-  const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
-  async function save(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setBusy(true);
-    const data = new FormData(e.currentTarget);
-    try {
-      onUpdate(
-        await api.updateProfile({
-          name: String(data.get("name")),
-          company: String(data.get("company")),
-        }),
-      );
-      setMessage("Your account has been updated.");
-    } catch (e) {
-      setMessage(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <div className="account-grid">
-      <form className="panel" onSubmit={save}>
-        <h2>Account details</h2>
-        <p>The details associated with your workspace.</p>
-        <label>
-          Full name
-          <input
-            name="name"
-            required
-            maxLength={100}
-            defaultValue={profile.name}
-          />
-        </label>
-        <label>
-          Company
-          <input
-            name="company"
-            maxLength={120}
-            defaultValue={profile.company}
-          />
-        </label>
-        <label>
-          Email address
-          <input value={profile.email} readOnly />
-        </label>
-        <p className="form-note">
-          Contact the team if your email address needs to change.
-        </p>
-        <button className="button" disabled={busy}>
-          {busy ? "Saving…" : "Save changes"}
-        </button>
-        {message && (
-          <div role="status" className="alert">
-            {message}
-          </div>
-        )}
-      </form>
-      <div className="panel">
-        <LockKeyhole className="blue-icon" />
-        <h2>Account security</h2>
-        <p>We’ll email a secure link to change your password.</p>
-        <Link to="/forgot-password" className="small-button">
-          Reset password <ArrowUpRight size={15} />
-        </Link>
-        <hr />
-        <span className="eyebrow">Your access</span>
-        <p>
-          {profile.role === "admin" ? "Administrator" : "Member"} · Active
-          account
-        </p>
-        <p className="form-note">
-          Application access is managed by an iRobotX administrator.
-        </p>
-      </div>
-    </div>
-  );
-}
-function Admin() {
-  const [users, setUsers] = useState<Profile[]>([]);
-  const [search, setSearch] = useState("");
-  const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [selected, setSelected] = useState<Profile | null>(null);
-  async function refresh() {
-    try {
-      setUsers(await api.listUsers());
-    } catch (e) {
-      setMessage(errorMessage(e));
-    }
-  }
-  useEffect(() => {
-    void api
-      .listUsers()
-      .then(setUsers)
-      .catch((e) => setMessage(errorMessage(e)));
-  }, []);
-  async function invite(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = e.currentTarget;
-    const data = new FormData(form);
-    setBusy(true);
-    try {
-      const result = await api.invite({
-        email: String(data.get("email")),
-        name: String(data.get("name")),
-        apps: data.getAll("apps") as AppId[],
-      });
-      setMessage(
-        result.delivery === "sent"
-          ? "Invitation sent."
-          : "Account created; invitation email is not yet delivered. Use Resend after checking email setup.",
-      );
-      form.reset();
-      await refresh();
-    } catch (e) {
-      setMessage(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-  async function save(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!selected) return;
-    setBusy(true);
-    const data = new FormData(e.currentTarget);
-    try {
-      await api.updateUser({
-        uid: selected.uid,
-        status: data.get("status") as "active" | "disabled",
-        apps: data.getAll("apps") as AppId[],
-      });
-      setSelected(null);
-      setMessage("Access updated.");
-      await refresh();
-    } catch (e) {
-      setMessage(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-  return (
-    <>
-      <div className="admin-heading">
-        <p>Invite people and manage access to the iRobotX workspace.</p>
-        <button className="small-button" onClick={refresh}>
-          <RefreshCw size={16} /> Refresh
-        </button>
-      </div>
-      {message && (
-        <div role="status" className="alert">
-          {message}
-        </div>
-      )}
-      <div className="admin-grid">
-        <div className="panel">
-          <label className="search-label">
-            <Search size={17} />
-            <input
-              aria-label="Search users"
-              placeholder="Search name or email"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </label>
-          <div className="user-list">
-            {users
-              .filter((u) =>
-                `${u.email} ${u.name}`
-                  .toLowerCase()
-                  .includes(search.toLowerCase()),
-              )
-              .map((u) => (
-                <article className="user-row" key={u.uid}>
-                  <div className="avatar">
-                    {(u.name || u.email).slice(0, 1).toUpperCase()}
-                  </div>
-                  <div className="user-info">
-                    <strong>{u.name || "Invited user"}</strong>
-                    <span>{u.email}</span>
-                    <small>
-                      {u.role} · {u.status}
-                      {u.invitationDelivery
-                        ? ` · email ${u.invitationDelivery}`
-                        : ""}
-                    </small>
-                  </div>
-                  <div className="user-actions">
-                    <button
-                      className="small-button"
-                      onClick={() => setSelected(u)}
-                    >
-                      Manage
-                    </button>
-                    {u.status === "invited" && (
-                      <button
-                        disabled={busy}
-                        className="text-button"
-                        onClick={async () => {
-                          setBusy(true);
-                          try {
-                            const r = await api.resend(u.uid);
-                            setMessage(
-                              r.delivery === "sent"
-                                ? "Invitation sent."
-                                : "Email delivery failed. Please check sender configuration.",
-                            );
-                            await refresh();
-                          } catch (e) {
-                            setMessage(errorMessage(e));
-                          } finally {
-                            setBusy(false);
-                          }
-                        }}
-                      >
-                        Resend
-                      </button>
-                    )}
-                  </div>
-                </article>
-              ))}
-            {users.length === 0 && <p>No users to display.</p>}
-          </div>
-        </div>
-        <form
-          className="panel"
-          onSubmit={selected ? save : invite}
-          key={selected?.uid || "invite"}
-        >
-          <h2>{selected ? "Manage access" : "Invite a teammate"}</h2>
-          {selected ? (
-            <>
-              <p>{selected.email}</p>
-              <label>
-                Account status
-                <select
-                  name="status"
-                  defaultValue={
-                    selected.status === "disabled" ? "disabled" : "active"
-                  }
-                >
-                  <option value="active">
-                    {selected.status === "invited"
-                      ? "Keep invitation active"
-                      : "Active"}
-                  </option>
-                  <option value="disabled">Disabled</option>
-                </select>
-              </label>
-            </>
-          ) : (
-            <>
-              <label>
-                Full name
-                <input name="name" required maxLength={100} />
-              </label>
-              <label>
-                Email address
-                <input name="email" type="email" required maxLength={254} />
-              </label>
-            </>
-          )}
-          <fieldset>
-            <legend>Application assignments</legend>
-            <p className="form-note">
-              These applications are coming soon. Assignments reserve future
-              access.
-            </p>
-            {demos.map((d) => (
-              <label className="checkbox" key={d.id}>
-                <input
-                  type="checkbox"
-                  name="apps"
-                  value={d.id}
-                  defaultChecked={selected?.apps.includes(d.id)}
-                />
-                {d.name}
-              </label>
-            ))}
-          </fieldset>
-          <button className="button" disabled={busy}>
-            {busy ? "Working…" : selected ? "Save access" : "Send invitation"}
-            <ArrowUpRight size={16} />
-          </button>
-          {selected && (
-            <button
-              type="button"
-              className="text-button"
-              onClick={() => setSelected(null)}
-            >
-              Cancel
-            </button>
-          )}
-        </form>
-      </div>
-    </>
-  );
-}
 export default function Portal({ path }: { path: string }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -559,154 +250,128 @@ export default function Portal({ path }: { path: string }) {
         </div>
       </main>
     );
-  const page =
-    path === "/portal/account"
-      ? "account"
-      : path === "/portal/contact"
-        ? "contact"
-        : path === "/portal/admin"
-          ? "admin"
-          : "apps";
+  const launcher = path === "/portal";
+  const app = MINI_APPS.find((item) => item.path === path);
+  const permitted = app && canOpenApp(profile, app.id);
   return (
-    <div className="portal-shell">
-      <aside className="portal-sidebar">
-        <Link to="/" aria-label="iRobotX home">
-          <Logo />
-        </Link>
-        <span className="eyebrow">Client workspace</span>
-        <nav aria-label="Workspace navigation">
-          <Link to="/portal" className={page === "apps" ? "active" : ""}>
-            <LayoutGrid size={18} /> Your apps
-          </Link>
-          <Link
-            to="/portal/account"
-            className={page === "account" ? "active" : ""}
-          >
-            <UserRound size={18} /> Account
-          </Link>
-          <Link
-            to="/portal/contact"
-            className={page === "contact" ? "active" : ""}
-          >
-            <Mail size={18} /> Contact team
-          </Link>
-          {profile.role === "admin" && (
-            <Link
-              to="/portal/admin"
-              className={page === "admin" ? "active" : ""}
-            >
-              <UsersRound size={18} /> User access
+    <div
+      className={`ix-portal ${launcher ? "ix-launcher-shell" : "ix-app-shell"}`}
+    >
+      <header className="ix-portal-header">
+        <div className="ix-portal-start">
+          {!launcher && (
+            <Link to="/portal" className="ix-back">
+              <ArrowLeft size={17} />
+              <span>Back to mini apps</span>
             </Link>
           )}
-        </nav>
-        <div className="sidebar-bottom">
-          <span>{profile.email}</span>
+          <Link
+            to="/portal"
+            aria-label="iRobotX mini apps"
+            className="ix-portal-logo"
+          >
+            <Logo />
+          </Link>
+        </div>
+        <div className="ix-portal-user">
+          <span>
+            {profile.name || profile.email}
+            <small>{profile.email}</small>
+          </span>
           <button
+            className="ix-signout"
             onClick={async () => {
               await signOut(auth);
               navigate("/signin");
             }}
           >
-            <LogOut size={16} /> Sign out
+            <LogOut size={16} />
+            <span>Sign out</span>
           </button>
         </div>
-      </aside>
-      <main className="portal-main">
-        <div className="portal-topline">
-          <span>
-            <i className="signal" /> iRobotX / WORKSPACE
-          </span>
-          <span className="badge">
-            {profile.role === "admin" ? "Administrator" : "Member"}
-          </span>
-        </div>
-        <header className="portal-title">
-          <span className="eyebrow">
-            {page === "apps"
-              ? "Your connected workspace"
-              : "Workspace / " + page}
-          </span>
-          <h1>
-            {page === "apps"
-              ? `Welcome, ${profile.name.split(" ")[0] || "there"}.`
-              : page === "account"
-                ? "Your account."
-                : page === "contact"
-                  ? "Let’s talk."
-                  : "User access."}
-          </h1>
-          {page === "apps" && (
-            <p>Your applications, account, and team—all in one place.</p>
-          )}
-        </header>
-        {page === "account" ? (
-          <Account profile={profile} onUpdate={setProfile} />
-        ) : page === "contact" ? (
-          <ContactForm prefill={profile} />
-        ) : page === "admin" ? (
-          profile.role === "admin" ? (
-            <Admin />
+      </header>
+      {launcher ? (
+        <main className="ix-launcher">
+          <div className="ix-launcher-heading">
+            <Mark className="ix-launcher-mark" />
+            <span className="eyebrow">YOUR IROBOTX WORKSPACE</span>
+            <h1>
+              Your tools.
+              <br />
+              <em>Connected.</em>
+            </h1>
+            <p>
+              Welcome back, {profile.name.split(" ")[0] || "there"}. Choose an
+              app to get started.
+            </p>
+          </div>
+          <section className="ix-app-grid" aria-label="Your mini apps">
+            {visibleMiniApps(profile).map((item) => (
+              <Link
+                key={item.id}
+                to={item.path}
+                className={`ix-app-tile ix-app-${item.id}`}
+              >
+                <span className="ix-app-symbol">
+                  <item.icon size={38} strokeWidth={1.5} />
+                </span>
+                <div>
+                  <h2>{item.label}</h2>
+                  <p>{item.description}</p>
+                </div>
+                <ArrowUpRight className="ix-tile-arrow" size={19} />
+                {item.id === "trading" && (
+                  <span className="ix-app-tag">PAPER TRADING</span>
+                )}
+              </Link>
+            ))}
+          </section>
+          <p className="ix-launcher-footer">
+            One workspace. Room for what’s next.
+          </p>
+        </main>
+      ) : (
+        <main className="ix-mini-app">
+          <header className="ix-mini-app-heading">
+            <span className="eyebrow">IROBOTX / MINI APPS</span>
+            <h1>{app?.label || "App not found"}</h1>
+            <p>
+              {app?.description ||
+                "Return to your mini apps to choose an available tool."}
+            </p>
+          </header>
+          {!permitted ? (
+            <div className="panel">
+              <h2>
+                {app
+                  ? "This app is not available to your account."
+                  : "This address does not match a mini app."}
+              </h2>
+              <Link to="/portal" className="small-button">
+                Back to mini apps
+              </Link>
+            </div>
           ) : (
-            <div className="alert error">Administrator access is required.</div>
-          )
-        ) : (
-          <>
-            <div className="portal-apps">
-              {[
-                {
-                  name: "Account",
-                  text: "Keep your personal and company details up to date.",
-                  to: "/portal/account",
-                  icon: <UserRound />,
-                },
-                {
-                  name: "Contact team",
-                  text: "Have a question or an idea? Get in touch with us.",
-                  to: "/portal/contact",
-                  icon: <Mail />,
-                },
-                ...(profile.role === "admin"
-                  ? [
-                      {
-                        name: "User access",
-                        text: "Invite teammates and manage application assignments.",
-                        to: "/portal/admin",
-                        icon: <UsersRound />,
-                      },
-                    ]
-                  : []),
-              ].map((app) => (
-                <Link to={app.to} className="panel app-card" key={app.name}>
-                  <div className="app-icon">{app.icon}</div>
-                  <span className="badge">Available</span>
-                  <h2>{app.name}</h2>
-                  <p>{app.text}</p>
-                  <span className="text-link">
-                    Open application <ArrowUpRight size={17} />
-                  </span>
-                </Link>
-              ))}
-            </div>
-            <div className="section-heading portal-section-heading">
-              <h2>On the horizon.</h2>
-              <span>More tools. New possibilities.</span>
-            </div>
-            <div className="portal-apps">
-              {demos.map((d) => (
-                <article className="panel app-card coming-soon" key={d.id}>
-                  <span className="eyebrow">{d.category}</span>
-                  <h2>{d.name}</h2>
-                  <p>{d.text}</p>
-                  <span className="badge muted">
-                    Coming soon
-                    {profile.apps.includes(d.id) ? " · Access assigned" : ""}
-                  </span>
-                </article>
-              ))}
-            </div>
-          </>
-        )}
-      </main>
+            <Suspense
+              fallback={
+                <p className="ix-app-loading" role="status">
+                  Opening {app.label}…
+                </p>
+              }
+            >
+              {app.id === "account" ? (
+                <Account profile={profile} onUpdate={setProfile} />
+              ) : app.id === "user-access" ? (
+                <Admin />
+              ) : app.id === "contact-team" ? (
+                <ContactTeam profile={profile} />
+              ) : (
+                <Trading />
+              )}
+            </Suspense>
+          )}
+        </main>
+      )}
     </div>
   );
 }

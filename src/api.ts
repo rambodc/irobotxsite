@@ -9,6 +9,7 @@ export interface Profile {
   role: "admin" | "member";
   status: "invited" | "active" | "disabled";
   apps: AppId[];
+  miniApps?: ("account" | "contact-team" | "user-access" | "trading")[];
   invitationDelivery?: "sent" | "failed" | "pending";
 }
 export interface ContactInput {

@@ -1,0 +1,283 @@
+.ix-portal {
+  min-height: 100dvh;
+  background:
+    radial-gradient(ellipse at 50% -25%, #10376755, transparent 62%), #080d16;
+  color: #e8edf5;
+}
+.ix-portal-header {
+  min-height: 82px;
+  padding: 18px clamp(20px, 4vw, 70px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid #ffffff10;
+  background: #080d1699;
+}
+.ix-portal-start,
+.ix-portal-user,
+.ix-back {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+.ix-portal-logo .logo {
+  width: 130px;
+}
+.ix-back {
+  gap: 9px;
+  font-size: 12px;
+  color: #a8b8cd;
+  white-space: nowrap;
+}
+.ix-back:hover {
+  color: white;
+}
+.ix-portal-user > span {
+  font-size: 12px;
+  text-align: right;
+}
+.ix-portal-user small {
+  display: block;
+  font-size: 10px;
+  color: #8290a5;
+  margin-top: 3px;
+}
+.ix-signout {
+  border: 1px solid #ffffff18;
+  background: transparent;
+  color: #adb9cc;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ix-signout:hover {
+  background: #ffffff0c;
+}
+.ix-launcher {
+  max-width: 1180px;
+  padding: 65px 28px 32px;
+  margin: auto;
+}
+.ix-launcher-heading {
+  text-align: center;
+  margin-bottom: 46px;
+}
+.ix-launcher-mark {
+  width: 62px;
+  height: 62px;
+  display: block;
+  margin: 0 auto 22px;
+  filter: drop-shadow(0 0 28px #287bff44);
+}
+.ix-launcher-heading h1 {
+  font-size: clamp(38px, 5vw, 60px);
+  font-weight: 500;
+  line-height: 1.08;
+  letter-spacing: -2px;
+  margin: 15px 0 18px;
+}
+.ix-launcher-heading em {
+  font-style: normal;
+  color: #82b9ff;
+}
+.ix-launcher-heading p {
+  font-size: 14px;
+  color: #91a0b7;
+}
+.ix-app-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+.ix-app-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+  min-height: 280px;
+  padding: 28px 24px;
+  border: 1px solid #ffffff14;
+  border-radius: 20px;
+  background: linear-gradient(150deg, #152236, #0d1522);
+  transition:
+    transform 0.18s,
+    border-color 0.18s,
+    background 0.18s;
+}
+.ix-app-tile:hover {
+  transform: translateY(-4px);
+  border-color: #7bacf078;
+  background: linear-gradient(150deg, #20344e, #101e31);
+}
+.ix-app-symbol {
+  width: 78px;
+  height: 78px;
+  border-radius: 23px;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(140deg, #3277c94d, #255ead15);
+  border: 1px solid #8cbaff22;
+  color: #9bccff;
+  box-shadow:
+    inset 0 1px #ffffff15,
+    0 14px 30px #0002;
+}
+.ix-app-account .ix-app-symbol {
+  color: #c4b7fa;
+  background: linear-gradient(140deg, #8263c44d, #61459515);
+}
+.ix-app-contact-team .ix-app-symbol {
+  color: #9cdbcf;
+  background: linear-gradient(140deg, #46a3904d, #234f4815);
+}
+.ix-app-user-access .ix-app-symbol {
+  color: #f3cd9b;
+  background: linear-gradient(140deg, #b086514d, #53402915);
+}
+.ix-app-tile h2 {
+  font-size: 19px;
+  margin: 0 0 8px;
+  font-weight: 500;
+  letter-spacing: -0.4px;
+}
+.ix-app-tile p {
+  font-size: 12px;
+  line-height: 1.7;
+  color: #93a5bd;
+  margin: 0;
+}
+.ix-tile-arrow {
+  position: absolute;
+  right: 23px;
+  top: 25px;
+  color: #5c7390;
+}
+.ix-app-tag {
+  color: #95bdeb;
+  font-size: 8px;
+  letter-spacing: 1.3px;
+  margin-top: auto;
+}
+.ix-launcher-footer {
+  text-align: center;
+  color: #64758b;
+  font-size: 11px;
+  letter-spacing: 0.7px;
+  margin-top: 44px;
+}
+.ix-mini-app {
+  max-width: 1500px;
+  margin: auto;
+  padding: 36px clamp(20px, 4vw, 70px) 60px;
+}
+.ix-mini-app-heading {
+  margin-bottom: 28px;
+}
+.ix-mini-app-heading h1 {
+  font-size: clamp(28px, 4vw, 38px);
+  letter-spacing: -1.2px;
+  margin: 10px 0;
+  font-weight: 500;
+}
+.ix-mini-app-heading > p {
+  color: #92a3b9;
+  font-size: 13px;
+}
+.ix-app-loading {
+  padding: 50px;
+  text-align: center;
+  color: #94a9c4;
+}
+.ix-portal a:focus-visible,
+.ix-portal button:focus-visible {
+  outline: 2px solid #8abdff;
+  outline-offset: 5px;
+}
+.ix-mini-app .account-grid {
+  max-width: 1050px;
+}
+.ix-mini-app .panel {
+  background: #101a29;
+}
+@media (max-width: 1000px) {
+  .ix-app-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .ix-app-tile {
+    min-height: 235px;
+  }
+  .ix-launcher {
+    max-width: 780px;
+  }
+}
+@media (max-width: 600px) {
+  .ix-portal-header {
+    padding: 14px 18px;
+    min-height: 70px;
+  }
+  .ix-portal-user small {
+    display: none;
+  }
+  .ix-portal-user > span {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ix-portal-user {
+    gap: 10px;
+  }
+  .ix-signout span {
+    display: none;
+  }
+  .ix-app-shell .ix-portal-logo {
+    display: none;
+  }
+  .ix-launcher {
+    padding: 36px 18px;
+  }
+  .ix-launcher-heading {
+    margin-bottom: 30px;
+  }
+  .ix-app-grid {
+    gap: 12px;
+  }
+  .ix-app-tile {
+    padding: 21px 16px;
+    min-height: 245px;
+    gap: 20px;
+    border-radius: 16px;
+  }
+  .ix-app-tile h2 {
+    font-size: 16px;
+  }
+  .ix-app-tile p {
+    font-size: 11px;
+  }
+  .ix-app-symbol {
+    width: 62px;
+    height: 62px;
+    border-radius: 18px;
+  }
+  .ix-tile-arrow {
+    display: none;
+  }
+  .ix-launcher-heading h1 {
+    font-size: 40px;
+  }
+  .ix-mini-app {
+    padding: 26px 18px 40px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ix-app-tile {
+    transition: none;
+  }
+  .ix-app-tile:hover {
+    transform: none;
+  }
+}

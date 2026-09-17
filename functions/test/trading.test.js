@@ -26,7 +26,7 @@ test("Asset identity rejects native XRP and invalid issuer", () => {
 });
 test("Decimal XRP conversion and bounded issued precision", () => {
   assert.equal(drops("1.0000019"), "1000001");
-  assert.equal(issued("1.2345678901234567"), "1.23456789012345");
+  assert.equal(issued("1.2345678901234567"), "1.234567890123456");
 });
 test("Reserve buffer and fee cap", () => {
   const w = { funded: true, available: "6.000012" };
@@ -91,4 +91,8 @@ test("Public intent strips payloads, seeds and internal fields", () => {
 });
 test("Nonvalidated response is never successful", () => {
   assert.throws(() => actualResult({ validated: false, meta: {} }, "r"));
+});
+
+test("Selling a canonical 16-digit ledger holding does not create rounding dust", () => {
+  assert.equal(issued("0.00002461630446795893"), "0.00002461630446795893");
 });

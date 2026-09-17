@@ -466,7 +466,18 @@ export default function TradingApp() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(loadedHistory ? [...data.transactions, ...history.filter(item => !data.transactions.some(latest => latest.id === item.id))] : data.transactions).map((t) => (
+                    {(loadedHistory
+                      ? [
+                          ...data.transactions,
+                          ...history.filter(
+                            (item) =>
+                              !data.transactions.some(
+                                (latest) => latest.id === item.id,
+                              ),
+                          ),
+                        ]
+                      : data.transactions
+                    ).map((t) => (
                       <tr key={t.id}>
                         <td>
                           <strong>{t.action}</strong>
@@ -487,6 +498,15 @@ export default function TradingApp() {
                               XRP change: {fmt(t.result.xrpChange)}
                               <br />
                               Token change: {fmt(t.result.tokenChange)}
+                              {t.result.executionPrice && (
+                                <>
+                                  <br />
+                                  Fill price: {fmt(
+                                    t.result.executionPrice,
+                                  )}{" "}
+                                  test XRP
+                                </>
+                              )}
                               <br />
                               Fee: {fmt(t.result.fee)} XRP
                             </>

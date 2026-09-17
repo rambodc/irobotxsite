@@ -15,6 +15,7 @@ export interface Transaction {
     result: string;
     fee: string;
     tokenChange: string;
+    executionPrice?: string | null;
     tradeXrp: string;
     xrpChange: string;
     ledger: number;

@@ -16,7 +16,7 @@ export const LIMITS = Object.freeze({
 export const xrp = (drops) => D(drops).div(1e6);
 export const drops = (value) => D(value).mul(1e6).floor().toFixed(0);
 export const issued = (value) =>
-  D(value).toSignificantDigits(15, Decimal.ROUND_DOWN).toString();
+  D(value).toSignificantDigits(16, Decimal.ROUND_DOWN).toString();
 export function assetValid(a) {
   return (
     a &&
@@ -271,6 +271,9 @@ export function actualResult(response, address, asset) {
     xrpChange: change,
     tradeXrp: D(change).plus(fee).toString(),
     tokenChange: token,
+    executionPrice: D(token).eq(0)
+      ? null
+      : D(change).plus(fee).div(token).abs().toString(),
     ledger: response.ledger_index,
     at: tx.date ? (tx.date + 946684800) * 1000 : Date.now(),
   };

@@ -56,21 +56,36 @@ async function patch(fields) {
     },
   );
 }
-async function provision(name) {
-  let version;
-  try {
-    const list = await request(`${secretBase}/${name}/versions?pageSize=100`);
-    version = list.versions?.find((v) => v.state === "ENABLED")?.name;
-    if (!version && list.versions?.length)
-      throw new Error(
-        "Existing secret has no enabled version; refuse replacement.",
-      );
-  } catch (e) {
-    if (e.status !== 404) throw e;
-    await request(`${secretBase}?secretId=${name}`, "POST", {
-      replication: { automatic: {} },
-    });
-  }
+let existing = {};
+try {
+  existing = (await request(doc)).fields || {};
+} catch (e) {
+  if (e.status !== 404) throw e;
+}
+async function provision(name, role) {
+  const pin = existing[role]?.mapValue?.fields;
+  let version = pin?.secretVersion?.stringValue;
+  if (
+    version &&
+    !new RegExp(
+      `^projects/(?:${project}|881476176668)/secrets/${name}/versions/[0-9]+$`,
+    ).test(version)
+  )
+    throw new Error("Invalid pinned secret reference.");
+  if (!version)
+    try {
+      const list = await request(`${secretBase}/${name}/versions?pageSize=100`);
+      version = list.versions?.find((v) => v.state === "ENABLED")?.name;
+      if (!version && list.versions?.length)
+        throw new Error(
+          "Existing secret has no enabled version; refuse replacement.",
+        );
+    } catch (e) {
+      if (e.status !== 404) throw e;
+      await request(`${secretBase}?secretId=${name}`, "POST", {
+        replication: { automatic: {} },
+      });
+    }
   let wallet;
   if (version) {
     const data = await request(
@@ -87,6 +102,13 @@ async function provision(name) {
       })
     ).name;
   }
+  if (
+    pin?.address?.stringValue &&
+    pin.address.stringValue !== wallet.classicAddress
+  )
+    throw new Error(
+      "Stored wallet address does not match its pinned secret; refusing replacement.",
+    );
   return { address: wallet.classicAddress, secretVersion: version };
 }
 async function rpc(method, params = {}) {
@@ -100,14 +122,14 @@ async function rpc(method, params = {}) {
 }
 const info = await rpc("server_info");
 if (info.info?.network_id !== 1) throw new Error("Testnet network mismatch.");
-const trader = await provision("XRPL_TESTNET_TRADER_SEED");
+const trader = await provision("XRPL_TESTNET_TRADER_SEED", "trader");
 await patch({
   network: "testnet",
   networkId: 1,
   trader,
   provisioning: "creating receiver",
 });
-const receiver = await provision("XRPL_TESTNET_RECEIVER_SEED");
+const receiver = await provision("XRPL_TESTNET_RECEIVER_SEED", "receiver");
 await patch({ receiver, provisioning: "funding" });
 for (const [role, w] of Object.entries({ trader, receiver })) {
   let a = await rpc("account_info", {

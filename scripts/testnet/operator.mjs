@@ -30,6 +30,8 @@ getFirestore().settings({
   auth: new GoogleAuth({ authClient, projectId: "irobotxsite" }),
 });
 const command = process.argv[2] || "status";
+// Leave dispatch to the deployed scheduler; this operator has no runtime identity.
+process.env.FUNCTIONS_EMULATOR = "true";
 await ensureState();
 if (command === "discover")
   console.log(

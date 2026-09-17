@@ -539,7 +539,12 @@ export async function finish(lease, status, error, result = null) {
           }
         : null,
       enabled: stop ? false : c.enabled,
-      health: { lastSuccess: Date.now(), error: error || null },
+      health: {
+        ...c.health,
+        lastReconciled: Date.now(),
+        ...(status === "validated" ? { lastSuccess: Date.now() } : {}),
+        error: error || null,
+      },
       budget,
     });
   });

@@ -31,6 +31,9 @@ const auth = getAuth(),
   trader = Wallet.generate(),
   recipient = Wallet.generate();
 const realFetch = global.fetch;
+let missingAccount = false,
+  gap = false,
+  feeHook = null;
 let sequence = 10,
   submitted = new Map(),
   submits = 0,
@@ -59,7 +62,7 @@ function ledgerFetch() {
               reserve_base_xrp: 1,
               reserve_inc_xrp: 0.2,
             },
-            complete_ledgers: `1-${ledgerIndex}`,
+            complete_ledgers: gap ? `999-${ledgerIndex}` : `1-${ledgerIndex}`,
           },
         };
         break;
@@ -67,6 +70,10 @@ function ledgerFetch() {
         result = { validated: true, ledger: { close_time: now } };
         break;
       case "account_info":
+        if (missingAccount) {
+          result = { error: "actNotFound" };
+          break;
+        }
         result = {
           account_data: {
             Balance: "100000000",
@@ -80,6 +87,7 @@ function ledgerFetch() {
         result = { lines: [] };
         break;
       case "fee":
+        if (feeHook) await feeHook();
         result = { drops: { open_ledger_fee: "10" } };
         break;
       case "submit": {
@@ -117,7 +125,7 @@ function ledgerFetch() {
                   ],
                 },
               }
-            : { error: "txnNotFound", searched_all: true };
+            : { error: "txnNotFound", searched_all: !gap };
         break;
       }
       default:
@@ -140,6 +148,9 @@ async function reset() {
     receiver: { address: recipient.classicAddress },
   });
   await ensureState();
+  missingAccount = false;
+  gap = false;
+  feeHook = null;
   sequence = 10;
   submitted = new Map();
   submits = 0;
@@ -365,6 +376,83 @@ test("Owner-only Testnet API and durable engine", async (t) => {
       assert.equal(p.cost, "0.5");
       assert.equal(p.realized, "-0.01001");
       await assert.rejects(() => enqueue("buy", "another-buy-request"));
+    },
+  );
+  await t.test(
+    "Crash after payload persistence resumes the same signed hash",
+    async () => {
+      await reset();
+      await enqueue("payment", "persisted-request");
+      const signed = trader.sign({
+        TransactionType: "Payment",
+        Account: trader.classicAddress,
+        Destination: recipient.classicAddress,
+        Amount: "1000000",
+        Sequence: 10,
+        Fee: "12",
+        LastLedgerSequence: 1004,
+        Flags: 0x80000000,
+      });
+      await rootRef()
+        .collection("payloads")
+        .doc("persisted-request")
+        .set({ blob: signed.tx_blob });
+      await rootRef()
+        .collection("intents")
+        .doc("persisted-request")
+        .update({
+          status: "signing",
+          hash: signed.hash,
+          sequence: 10,
+          firstLedger: 1000,
+          lastLedger: 1004,
+          quoteAt: Date.now(),
+        });
+      await processPending({ sleep: async () => {} });
+      const result = (
+        await rootRef().collection("intents").doc("persisted-request").get()
+      ).data();
+      assert.equal(result.hash, signed.hash);
+      assert.equal(result.status, "validated");
+      assert.equal(submits, 1);
+    },
+  );
+  await t.test(
+    "Pause during execution preparation prevents submission",
+    async () => {
+      await reset();
+      await enqueue("payment", "inflight-pause-request");
+      let count = 0;
+      feeHook = async () => {
+        if (++count === 2) await automation(false);
+      };
+      await processPending({ signer: trader, sleep: async () => {} });
+      assert.equal(submits, 0);
+      assert.equal(
+        (
+          await rootRef()
+            .collection("intents")
+            .doc("inflight-pause-request")
+            .get()
+        ).data().status,
+        "cancelled",
+      );
+    },
+  );
+  await t.test(
+    "Account disappearance after Testnet reset stops signing",
+    async () => {
+      await reset();
+      await enqueue("payment", "reset-request");
+      missingAccount = true;
+      await processPending({ signer: trader, sleep: async () => {} });
+      assert.equal(submits, 0);
+      assert.match(
+        (
+          await rootRef().collection("intents").doc("reset-request").get()
+        ).data().error,
+        /reset/,
+      );
     },
   );
   global.fetch = realFetch;

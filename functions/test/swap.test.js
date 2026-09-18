@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { initialState, D, RLUSD } from "../mainnet/config.js";
 import { prepareSwap, swapInput } from "../mainnet/swap.js";
+import { verifyFresh } from "../mainnet/execution.js";
 import { accountFill } from "../mainnet/strategy.js";
 const state = () => ({
   ...initialState(),
@@ -102,3 +103,45 @@ test("manual swap fills and fees stay outside automated position and P/L", () =>
   });
   assert.deepEqual(next, { ...original, setupFees: "0.000012" });
 });
+
+for (const currency of ["XRP", "RLUSD"]) {
+  test(`${currency} swap preserves its confirmed minimum through favorable and adverse movement`, () => {
+    const original = quote({ currency, amount: "10" });
+    const signed = { ...original.order, Sequence: 1, Fee: "12" };
+    for (const factor of ["1.002", "0.998"]) {
+      const moved = {
+        bid: D(market.bid).mul(factor).toString(),
+        ask: D(market.ask).mul(factor).toString(),
+        bids: market.bids.map((l) => ({
+          ...l,
+          price: D(l.price).mul(factor).toString(),
+          value: D(l.value).mul(factor).toString(),
+        })),
+        asks: market.asks.map((l) => ({
+          ...l,
+          price: D(l.price).mul(factor).toString(),
+          value: D(l.value).mul(factor).toString(),
+        })),
+      };
+      const fresh = quote(original.swap, state(), moved);
+      assert.equal(fresh.swap.minimum, original.swap.minimum);
+      assert.deepEqual(fresh.order, original.order);
+      assert.doesNotThrow(() =>
+        verifyFresh(signed, { ...fresh.order, Sequence: 1, Fee: "12" }),
+      );
+    }
+    const unfavorable = currency === "XRP" ? "0.98" : "1.02";
+    const tooFar = {
+      ...market,
+      bids: market.bids.map((l) => ({
+        ...l,
+        price: D(l.price).mul(unfavorable).toString(),
+      })),
+      asks: market.asks.map((l) => ({
+        ...l,
+        price: D(l.price).mul(unfavorable).toString(),
+      })),
+    };
+    assert.throws(() => quote(original.swap, state(), tooFar), /liquidity/);
+  });
+}

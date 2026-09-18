@@ -39,6 +39,7 @@ const auth = getAuth(),
   recipient = Wallet.generate();
 const realFetch = global.fetch;
 let frozenLine = false;
+let marketFactor = "1";
 let hasLine = false,
   walletBalance = "100000000",
   tokenBalance = "100",
@@ -121,12 +122,18 @@ function ledgerFetch() {
               ? [
                   {
                     TakerGets: "100000000",
-                    TakerPays: { ...RLUSD, value: "130" },
+                    TakerPays: {
+                      ...RLUSD,
+                      value: D("130").mul(marketFactor).toString(),
+                    },
                   },
                 ]
               : [
                   {
-                    TakerGets: { ...RLUSD, value: "129.99" },
+                    TakerGets: {
+                      ...RLUSD,
+                      value: D("129.99").mul(marketFactor).toString(),
+                    },
                     TakerPays: "100000000",
                   },
                 ],
@@ -240,6 +247,7 @@ async function reset() {
   });
   await ensureState();
   frozenLine = false;
+  marketFactor = "1";
   hasLine = false;
   walletBalance = "100000000";
   tokenBalance = "100";
@@ -497,6 +505,65 @@ test("Owner-only Mainnet API and durable engine", async (t) => {
       }
     },
   );
+  for (const currency of ["XRP", "RLUSD"]) {
+    await t.test(
+      `${currency} manual swap tolerates better prices between signing and submission`,
+      async () => {
+        await reset();
+        hasLine = true;
+        await acknowledgeBalances();
+        const q = await walletRequest({
+          action: "swapQuote",
+          currency,
+          amount: "10",
+        });
+        await walletRequest({ action: "swap", quoteId: q.id });
+        let checks = 0;
+        feeHook = async () => {
+          if (++checks === 2)
+            marketFactor = currency === "XRP" ? "1.002" : "0.998";
+        };
+        await processPending({ signer: trader, sleep: async () => {} });
+        const intent = (
+          await rootRef().collection("intents").doc(`swap-${q.id}`).get()
+        ).data();
+        assert.equal(intent.status, "validated", intent.error);
+        assert.equal(submits, 1);
+        const tx = [...submitted.values()][0];
+        const receipt =
+          currency === "XRP"
+            ? tx.TakerPays.value
+            : D(tx.TakerPays).div(1e6).toString();
+        assert.equal(receipt, q.minimum);
+      },
+    );
+    await t.test(
+      `${currency} manual swap still blocks prices outside the confirmed minimum`,
+      async () => {
+        await reset();
+        hasLine = true;
+        await acknowledgeBalances();
+        const q = await walletRequest({
+          action: "swapQuote",
+          currency,
+          amount: "10",
+        });
+        await walletRequest({ action: "swap", quoteId: q.id });
+        let checks = 0;
+        feeHook = async () => {
+          if (++checks === 2)
+            marketFactor = currency === "XRP" ? "0.98" : "1.02";
+        };
+        await processPending({ signer: trader, sleep: async () => {} });
+        const intent = (
+          await rootRef().collection("intents").doc(`swap-${q.id}`).get()
+        ).data();
+        assert.equal(intent.status, "failed");
+        assert.match(intent.error, /liquidity/);
+        assert.equal(submits, 0);
+      },
+    );
+  }
   await t.test("Pause before submission cancels queued intent", async () => {
     await reset();
     await enqueue("trust", "pause-request");

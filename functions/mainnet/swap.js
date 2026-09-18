@@ -43,12 +43,15 @@ export function prepareSwap(c, input, m, w, line, fee, now = Date.now()) {
     ? D(m.bid).mul(D(1).minus(movement))
     : D(m.ask).mul(D(1).plus(movement));
   const rawMinimum = sellXrp ? spend.mul(boundary) : spend.div(boundary);
-  // Round minimum receipts up so rounding never weakens the price bound.
-  let minimum = sellXrp
-    ? rawMinimum.toSignificantDigits(16, 2)
-    : rawMinimum.mul(1e6).ceil().div(1e6);
-  if (input.minimum !== undefined && D(input.minimum).gt(minimum))
-    minimum = D(input.minimum);
+  // Set the bound once when quoting. Rechecks preserve the owner's confirmed
+  // minimum exactly; repricing it could reject a signed order when prices improve.
+  // Current spread, funded depth, balances, expiry and reserves are still checked.
+  const minimum =
+    input.minimum !== undefined
+      ? D(input.minimum)
+      : sellXrp
+        ? rawMinimum.toSignificantDigits(16, 2)
+        : rawMinimum.mul(1e6).ceil().div(1e6);
   const limit = sellXrp ? minimum.div(spend) : spend.div(minimum);
   let remaining = spend,
     estimate = D(0);

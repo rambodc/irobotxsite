@@ -4,6 +4,7 @@ import { getFunctions } from "firebase-admin/functions";
 import { randomUUID } from "node:crypto";
 import { canTrade, tradingOwner } from "../trading/access.js";
 import { initialState, D } from "./config.js";
+import { swapAllowed } from "./swap.js";
 import { approvalValid } from "./strategy.js";
 export const rootRef = () =>
   getFirestore().doc(`xrplMainnet/${tradingOwner()}`);
@@ -24,6 +25,7 @@ export const publicIntent = (id, v) =>
         "submittedAt",
         "reason",
         "withdrawal",
+        "swap",
       ].includes(k),
     ),
   );
@@ -53,7 +55,7 @@ export async function dispatch(id, worker = "mainnetWorker") {
 }
 export async function enqueue(action, id, options = {}) {
   if (
-    !["trust", "buy", "sell", "withdraw"].includes(action) ||
+    !["trust", "buy", "sell", "withdraw", "swap"].includes(action) ||
     !/^[-\w]{8,80}$/.test(id)
   )
     throw new Error("Invalid action or request ID.");
@@ -64,9 +66,11 @@ export async function enqueue(action, id, options = {}) {
     const [s, old] = await Promise.all([t.get(root), t.get(ref)]),
       c = s.data();
     const withdrawal = options.withdrawal || null;
+    const swapQuoteId = options.swapQuoteId || null;
     if (old.exists) {
       if (
         old.data().action !== action ||
+        (old.data().swapQuoteId || null) !== swapQuoteId ||
         JSON.stringify(old.data().withdrawal) !== JSON.stringify(withdrawal)
       )
         throw new Error("Request ID belongs to another request.");
@@ -96,6 +100,27 @@ export async function enqueue(action, id, options = {}) {
         withdrawal.tag !== c.returnAddress?.tag)
     )
       throw new Error("Withdrawal must use the saved return address.");
+    let swap = null;
+    if (action === "swap") {
+      swapAllowed(c);
+      if (
+        options.automatic ||
+        !/^[a-f0-9-]{36}$/.test(swapQuoteId || "") ||
+        id !== `swap-${swapQuoteId}`
+      )
+        throw new Error("Invalid manual swap request.");
+      const quote = await t.get(root.collection("swapQuotes").doc(swapQuoteId));
+      if (
+        !quote.exists ||
+        quote.data().validUntil <= Date.now() ||
+        quote.data().revision !== c.revision
+      )
+        throw new Error(
+          "Swap quote expired or settings changed. Request a new quote.",
+        );
+      const { expiresAt, ...value } = quote.data();
+      swap = value;
+    }
     const intent = {
       action,
       status: "queued",
@@ -104,7 +129,13 @@ export async function enqueue(action, id, options = {}) {
       revision: c.revision,
       automatic: !!options.automatic,
       withdrawal,
-      reason: options.reason || action,
+      swapQuoteId,
+      swap,
+      reason:
+        options.reason ||
+        (swap
+          ? `Manual ${swap.currency} → ${swap.receiveCurrency} swap`
+          : action),
       decisionId: action === "buy" ? c.analysis.id : null,
     };
     t.create(ref, intent);

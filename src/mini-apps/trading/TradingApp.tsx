@@ -20,6 +20,7 @@ import {
   type Transaction,
   type Cursor,
 } from "./api";
+import SwapForm from "./SwapForm";
 import "./trading.css";
 const fmt = (v?: string | null) =>
   v == null
@@ -425,8 +426,8 @@ export default function TradingApp() {
                   </li>
                   <li>Create the 1,000-RLUSD trust line.</li>
                   <li>
-                    Deposit RLUSD to this address, then review your settings and
-                    press Start.
+                    Deposit RLUSD or use Swap assets below, then review your
+                    settings and press Start.
                   </li>
                 </ol>
                 <button
@@ -461,6 +462,8 @@ export default function TradingApp() {
                 </p>
               </section>
               <section className="xt-card">
+                <SwapForm data={data} busy={busy} perform={perform} />
+                <hr />
                 <h2>Saved return address</h2>
                 {data.returnAddress && (
                   <>

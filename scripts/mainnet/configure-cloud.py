@@ -34,6 +34,6 @@ for queue in ['mainnetWorker','mainnetAnalyst']:
  try: run('tasks','queues','describe',queue,'--location=us-central1')
  except RuntimeError: run('tasks','queues','create',queue,'--location=us-central1')
  run('tasks','queues','add-iam-policy-binding',queue,'--location=us-central1','--member=serviceAccount:xrpl-mainnet-api@irobotxsite.iam.gserviceaccount.com','--role=roles/cloudtasks.enqueuer')
-for collection in ['mainnetSamples','mainnetDecisions','mainnetAiUsage','mainnetNews']:
+for collection in ['mainnetSamples','mainnetDecisions','mainnetAiUsage','mainnetNews','swapQuotes']:
  run('firestore','fields','ttls','update','expiresAt','--collection-group='+collection,'--enable-ttl','--async')
 print('Mainnet identities, queue permissions and retention configured.')

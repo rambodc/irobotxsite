@@ -270,7 +270,7 @@ export function covered(ranges, min, max) {
 export function ledgerFailure(code) {
   const explanations = {
     tecKILLED:
-      "The immediate-or-cancel order could not fill within its price limit.",
+      "The order could not fill within its price limit.",
     tecUNFUNDED_OFFER:
       "The ledger rejected the order because spendable funds were insufficient.",
     tecFROZEN:

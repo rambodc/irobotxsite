@@ -148,6 +148,12 @@ function ledgerFetch() {
           const buy = typeof tx.TakerGets === "object";
           delta = D(buy ? "7.69" : "-3");
           td = D(buy ? "-10" : "3.9");
+          if (tx.Flags === 0x800c0000) {
+            delta = buy
+              ? D(tx.TakerPays).div(1e6)
+              : D(tx.TakerGets).div(1e6).neg();
+            td = buy ? D(tx.TakerGets.value).neg() : D(tx.TakerPays.value);
+          }
         }
         if (tx.TransactionType === "Payment") {
           if (typeof tx.Amount === "string")
@@ -375,6 +381,120 @@ test("Owner-only Mainnet API and durable engine", async (t) => {
       );
       await processPending({ signer: trader });
       assert.equal(submits, 1);
+    },
+  );
+  for (const currency of ["XRP", "RLUSD"]) {
+    await t.test(
+      `Manual ${currency} swap quotes, signs and reconciles once without bot P/L`,
+      async () => {
+        await reset();
+        hasLine = true;
+        await acknowledgeBalances();
+        const q = await walletRequest({
+          action: "swapQuote",
+          currency,
+          amount: "10",
+        });
+        assert.equal(submits, 0);
+        await assert.rejects(() =>
+          walletRequest({ action: "swap", quoteId: q.id, minimum: "0" }),
+        );
+        const req = { action: "swap", quoteId: q.id };
+        await Promise.all([walletRequest(req), walletRequest(req)]);
+        await processPending({ signer: trader, sleep: async () => {} });
+        const c = (await rootRef().get()).data();
+        const i = (
+          await rootRef().collection("intents").doc(`swap-${q.id}`).get()
+        ).data();
+        assert.equal(i.status, "validated");
+        assert.equal(i.swap.currency, currency);
+        assert.equal(c.position.quantity, "0");
+        assert.equal(c.position.realized, "0");
+        assert.equal(c.position.setupFees, "0.000012");
+        assert.equal(c.budget.spent, "0");
+        assert.equal(c.expected.xrp, D(walletBalance).div(1e6).toString());
+        assert.equal(c.expected.rlusd, tokenBalance);
+        assert.equal(c.mode, "paused");
+        await walletRequest(req);
+        await processPending({ signer: trader });
+        assert.equal(submits, 1);
+      },
+    );
+  }
+  await t.test(
+    "Manual swap rejects stale quote, live positions and external balance changes",
+    async () => {
+      await reset();
+      hasLine = true;
+      await acknowledgeBalances();
+      const q = await walletRequest({
+        action: "swapQuote",
+        currency: "XRP",
+        amount: "10",
+      });
+      const ref = rootRef().collection("swapQuotes").doc(q.id);
+      await ref.update({ validUntil: Date.now() - 1 });
+      await assert.rejects(
+        () => walletRequest({ action: "swap", quoteId: q.id }),
+        /expired/,
+      );
+      await rootRef().update({ "position.quantity": "1" });
+      await assert.rejects(
+        () =>
+          walletRequest({ action: "swapQuote", currency: "XRP", amount: "10" }),
+        /position/,
+      );
+      await rootRef().update({ "position.quantity": "0" });
+      const fresh = await walletRequest({
+        action: "swapQuote",
+        currency: "XRP",
+        amount: "10",
+      });
+      await walletRequest({ action: "swap", quoteId: fresh.id });
+      walletBalance = "101000000";
+      await processPending({ signer: trader, sleep: async () => {} });
+      assert.equal(submits, 0);
+      assert.equal(
+        (
+          await rootRef().collection("intents").doc(`swap-${fresh.id}`).get()
+        ).data().status,
+        "failed",
+      );
+    },
+  );
+  await t.test(
+    "Manual swap rechecks pause and expiry at the worker gate",
+    async () => {
+      for (const change of ["pause", "expiry", "submission"]) {
+        await reset();
+        hasLine = true;
+        await acknowledgeBalances();
+        const q = await walletRequest({
+          action: "swapQuote",
+          currency: "XRP",
+          amount: "10",
+        });
+        await walletRequest({ action: "swap", quoteId: q.id });
+        if (change === "pause") await automation("paused");
+        else if (change === "submission") {
+          let checks = 0;
+          feeHook = async () => {
+            if (++checks === 2)
+              await rootRef()
+                .collection("intents")
+                .doc(`swap-${q.id}`)
+                .update({
+                  "swap.validUntil": Date.now() - 1,
+                });
+          };
+        } else
+          await rootRef()
+            .collection("intents")
+            .doc(`swap-${q.id}`)
+            .update({ "swap.validUntil": Date.now() - 1 });
+        await processPending({ signer: trader, sleep: async () => {} });
+        assert.equal(submits, 0);
+      }
     },
   );
   await t.test("Pause before submission cancels queued intent", async () => {

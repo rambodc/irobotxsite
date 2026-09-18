@@ -10,6 +10,7 @@ import {
   xrp,
   issuerAllowed,
 } from "./ledger.js";
+import { prepareSwap } from "./swap.js";
 import { approvalValid } from "./strategy.js";
 export async function prepare(c, i, h) {
   const w = await wallet(c.trader.address, h);
@@ -123,6 +124,10 @@ export async function prepare(c, i, h) {
     throw new Error(
       "Ledger balance changed outside the engine; review before trading.",
     );
+  if (i.action === "swap") {
+    const { order, swap } = prepareSwap(c, i.swap, m, w, line, fee);
+    return { tx: { ...tx, ...order }, swap, markPrice: m.ask, wallet: w };
+  }
   const cfg = c.settings,
     movement = D(cfg.movement).div(100);
   if (i.action === "buy") {

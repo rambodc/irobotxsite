@@ -11,6 +11,8 @@ import { tradingApi } from "../src/mini-apps/trading/api";
 vi.mock("../src/mini-apps/trading/api", () => ({
   tradingApi: {
     dashboard: vi.fn(),
+    swapQuote: vi.fn(),
+    swap: vi.fn(),
     settings: vi.fn(),
     request: vi.fn(),
     automation: vi.fn(),
@@ -161,6 +163,86 @@ describe("Mainnet trading workspace", () => {
     expect((screen.getByText("Start") as HTMLButtonElement).disabled).toBe(
       true,
     );
+  });
+  it("quotes both directions and only submits the confirmed server quote", async () => {
+    vi.mocked(tradingApi.swapQuote).mockResolvedValue({
+      id: "quote-id",
+      currency: "RLUSD",
+      receiveCurrency: "XRP",
+      amount: "10",
+      estimate: "5",
+      minimum: "4.975",
+      maxFee: "0.01",
+      movement: "0.5",
+      validUntil: Date.now() + 60000,
+    });
+    render(<TradingApp />);
+    await screen.findByText("7 XRP");
+    fireEvent.change(screen.getByLabelText("Swap direction"), {
+      target: { value: "RLUSD" },
+    });
+    fireEvent.change(screen.getByLabelText("Amount to swap (RLUSD)"), {
+      target: { value: "10" },
+    });
+    fireEvent.click(screen.getByText("Get swap quote"));
+    await screen.findByText("4.975 XRP");
+    expect(tradingApi.swapQuote).toHaveBeenCalledWith("RLUSD", "10");
+    expect(tradingApi.swap).not.toHaveBeenCalled();
+    vi.mocked(window.confirm).mockReturnValue(false);
+    fireEvent.click(screen.getByText("Confirm swap"));
+    expect(tradingApi.swap).not.toHaveBeenCalled();
+    vi.mocked(window.confirm).mockReturnValue(true);
+    fireEvent.click(screen.getByText("Confirm swap"));
+    await waitFor(() =>
+      expect(tradingApi.swap).toHaveBeenCalledWith("quote-id"),
+    );
+    expect(window.confirm).toHaveBeenLastCalledWith(
+      expect.stringContaining("at least 4.975 XRP"),
+    );
+  });
+  it("clears a quote when its input changes and disables expired confirmation", async () => {
+    vi.mocked(tradingApi.swapQuote).mockResolvedValue({
+      id: "expired",
+      currency: "XRP",
+      receiveCurrency: "RLUSD",
+      amount: "10",
+      estimate: "20",
+      minimum: "19.9",
+      maxFee: "0.01",
+      movement: "0.5",
+      validUntil: Date.now() - 1000,
+    });
+    render(<TradingApp />);
+    await screen.findByText("7 XRP");
+    fireEvent.change(screen.getByLabelText("Amount to swap (XRP)"), {
+      target: { value: "10" },
+    });
+    fireEvent.click(screen.getByText("Get swap quote"));
+    await screen.findByText("19.9 RLUSD");
+    expect(
+      (screen.getByText("Confirm swap") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    fireEvent.change(screen.getByLabelText("Amount to swap (XRP)"), {
+      target: { value: "9" },
+    });
+    expect(screen.queryByText("Confirm swap")).toBeNull();
+  });
+  it("blocks manual swaps until deposit changes are acknowledged", async () => {
+    vi.mocked(tradingApi.dashboard).mockResolvedValue({
+      ...data,
+      discrepancy: { at: Date.now() },
+    } as never);
+    render(<TradingApp />);
+    await screen.findByText("7 XRP");
+    fireEvent.change(screen.getByLabelText("Amount to swap (XRP)"), {
+      target: { value: "10" },
+    });
+    expect(
+      (screen.getByText("Get swap quote") as HTMLButtonElement).disabled,
+    ).toBe(true);
+    expect(
+      screen.getByText("Acknowledge current balances above before swapping."),
+    ).toBeTruthy();
   });
   it("withdrawals remain disabled without a saved return address", async () => {
     render(<TradingApp />);

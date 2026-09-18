@@ -27,6 +27,7 @@ import {
   releaseLease,
   mutate,
 } from "./state.js";
+import { swapAllowed } from "./swap.js";
 import { prepare, verifyFresh } from "./execution.js";
 import { approvalValid, accountFill } from "./strategy.js";
 const tokenBalance = (w) =>
@@ -41,7 +42,9 @@ export async function finish(lease, status, error, result = null) {
     const closed = i.action === "sell" && D(position.quantity).eq(0);
     const fatal = status !== "validated" && i.action !== "sell";
     const noFill =
-      result && ["buy", "sell"].includes(i.action) && D(result.tradeXrp).eq(0);
+      result &&
+      ["buy", "sell", "swap"].includes(i.action) &&
+      D(result.tradeXrp).eq(0);
     t.update(ref, {
       status,
       error: error || (noFill ? "Validated order had no fill." : null),
@@ -231,6 +234,13 @@ export async function processPending(deps = {}) {
         (intent.automatic && !state.enabled)
       )
         return false;
+      if (intent.action === "swap") {
+        swapAllowed(state);
+        if (intent.swap.validUntil <= Date.now())
+          throw new Error(
+            "Swap quote expired before submission. Request a new quote.",
+          );
+      }
       const updates = {};
       if (intent.action === "buy") {
         const day = new Date().toISOString().slice(0, 10),

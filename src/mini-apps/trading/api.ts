@@ -15,6 +15,17 @@ export interface Settings {
   movement: string;
   aiBudget: string;
 }
+export interface SwapQuote {
+  id: string;
+  currency: "XRP" | "RLUSD";
+  receiveCurrency: "XRP" | "RLUSD";
+  amount: string;
+  estimate: string;
+  minimum: string;
+  movement: string;
+  maxFee: string;
+  validUntil: number;
+}
 export interface Transaction {
   id: string;
   action: string;
@@ -116,6 +127,14 @@ async function call<T>(name: string, input: unknown = {}): Promise<T> {
   return (await httpsCallable<unknown, T>(functions, name)(input)).data;
 }
 export const tradingApi = {
+  swapQuote: (currency: "XRP" | "RLUSD", amount: string) =>
+    call<SwapQuote>("mainnetRequest", {
+      action: "swapQuote",
+      currency,
+      amount,
+    }),
+  swap: (quoteId: string) =>
+    call<Transaction>("mainnetRequest", { action: "swap", quoteId }),
   dashboard: () => call<Dashboard>("mainnetDashboard"),
   settings: (v: Settings) => call("mainnetSettings", v),
   automation: (mode: Dashboard["mode"]) => call("mainnetAutomation", { mode }),

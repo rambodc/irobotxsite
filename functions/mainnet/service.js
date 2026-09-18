@@ -1,3 +1,6 @@
+import { randomUUID } from "node:crypto";
+import { prepare } from "./execution.js";
+import { swapInput, swapAllowed } from "./swap.js";
 import { getFirestore, Timestamp } from "firebase-admin/firestore";
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { HttpsError } from "firebase-functions/v2/https";
@@ -224,6 +227,39 @@ export async function saveReturnAddress(d, auth) {
   return { saved: true };
 }
 export async function request(d) {
+  if (d.action === "swapQuote") {
+    if (
+      Object.keys(d).some((k) => !["action", "amount", "currency"].includes(k))
+    )
+      throw new Error("Unsupported quote fields.");
+    const input = swapInput(d.currency, d.amount);
+    const c = await ensureState();
+    swapAllowed(c);
+    if (c.pending) throw new Error("Wait for the pending transaction.");
+    const prepared = await prepare(
+      c,
+      { action: "swap", swap: input },
+      await ledger(),
+    );
+    const id = randomUUID();
+    await rootRef()
+      .collection("swapQuotes")
+      .doc(id)
+      .create({
+        ...prepared.swap,
+        expiresAt: Timestamp.fromMillis(Date.now() + 86400000),
+      });
+    return { id, ...prepared.swap };
+  }
+  if (d.action === "swap") {
+    if (
+      Object.keys(d).some((k) => !["action", "quoteId"].includes(k)) ||
+      !/^[a-f0-9-]{36}$/.test(d.quoteId || "")
+    )
+      throw new Error("Invalid swap quote.");
+    return enqueue("swap", `swap-${d.quoteId}`, { swapQuoteId: d.quoteId });
+  }
+
   if (
     Object.keys(d).some(
       (k) => !["action", "requestId", "amount", "currency"].includes(k),

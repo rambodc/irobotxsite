@@ -14,22 +14,42 @@ export function assertNetwork(info) {
     );
 }
 export async function rpc(method, params = {}) {
-  const res = await fetch(RPC, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ method, params: [{ ...params, api_version: 2 }] }),
-    signal: AbortSignal.timeout(15000),
-  });
-  if (!res.ok) throw new Error("Mainnet RPC unavailable.");
-  const result = (await res.json()).result;
-  if (result?.error) {
-    const e = new Error(result.error_message || result.error);
-    e.code = result.error;
-    e.result = result;
-    throw e;
+  const pinnedRead =
+    !!params.ledger_hash &&
+    ["ledger", "account_info", "account_lines", "book_offers"].includes(method);
+  // Retry the identical validated snapshot only. Never retry submissions here,
+  // or substitute a different ledger underneath balance and price checks.
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(RPC, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ method, params: [{ ...params, api_version: 2 }] }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) throw new Error("Mainnet RPC unavailable.");
+    const result = (await res.json()).result;
+    if (result?.error) {
+      const unavailable = ["ledgerNotFound", "lgrNotFound"].includes(
+        result.error,
+      );
+      if (pinnedRead && unavailable && attempt < 2) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, 500 * (attempt + 1)),
+        );
+        continue;
+      }
+      const e = new Error(
+        pinnedRead && unavailable
+          ? "The ledger server is temporarily missing this snapshot. Refresh and try again."
+          : result.error_message || result.error,
+      );
+      e.code = result.error;
+      e.result = result;
+      throw e;
+    }
+    if (!result) throw new Error("Empty Mainnet RPC response.");
+    return result;
   }
-  if (!result) throw new Error("Empty Mainnet RPC response.");
-  return result;
 }
 export async function ledger() {
   const { info } = await rpc("server_info");
@@ -269,8 +289,7 @@ export function covered(ranges, min, max) {
 
 export function ledgerFailure(code) {
   const explanations = {
-    tecKILLED:
-      "The order could not fill within its price limit.",
+    tecKILLED: "The order could not fill within its price limit.",
     tecUNFUNDED_OFFER:
       "The ledger rejected the order because spendable funds were insufficient.",
     tecFROZEN:

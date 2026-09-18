@@ -16,7 +16,6 @@ import {
   rpc,
   ledger,
   wallet,
-  trustLine,
   actualResult,
   covered,
   ledgerFailure,
@@ -30,6 +29,10 @@ import {
 } from "./state.js";
 import { prepare, verifyFresh } from "./execution.js";
 import { approvalValid, accountFill } from "./strategy.js";
+const tokenBalance = (w) =>
+  w.lines.find(
+    (l) => l.currency === RLUSD.currency && l.account === RLUSD.issuer,
+  )?.balance || "0";
 export async function finish(lease, status, error, result = null) {
   await mutate(lease, (t, root, ref, c, i) => {
     const position = result
@@ -191,7 +194,7 @@ export async function processPending(deps = {}) {
           quoteAt: h.at,
           markPrice: prepared.markPrice,
           beforeBalance: prepared.wallet.balance,
-          beforeToken: trustLine(prepared.wallet)?.balance || "0",
+          beforeToken: tokenBalance(prepared.wallet),
           updatedAt: Date.now(),
         });
       });
@@ -254,7 +257,7 @@ export async function processPending(deps = {}) {
         status: "submitted",
         submittedAt: Date.now(),
         beforeBalance: fresh.wallet.balance,
-        beforeToken: trustLine(fresh.wallet)?.balance || "0",
+        beforeToken: tokenBalance(fresh.wallet),
         updatedAt: Date.now(),
       });
       return true;

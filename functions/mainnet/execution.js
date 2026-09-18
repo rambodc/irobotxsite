@@ -22,12 +22,17 @@ export async function prepare(c, i, h) {
   );
   if (!Number.isSafeInteger(Number(fee)) || Number(fee) > LIMITS.feeDrops)
     throw new Error("Transaction fee exceeds 0.01 XRP.");
-  const line = trustLine(w);
-  const issuer = await rpc("account_info", {
-    account: RLUSD.issuer,
-    ledger_hash: h.hash,
-  });
-  issuerAllowed(issuer.account_data);
+  // Native XRP withdrawals do not depend on an issued asset's freeze state.
+  const nativeWithdrawal =
+    i.action === "withdraw" && i.withdrawal?.currency === "XRP";
+  const line = nativeWithdrawal ? null : trustLine(w);
+  if (!nativeWithdrawal) {
+    const issuer = await rpc("account_info", {
+      account: RLUSD.issuer,
+      ledger_hash: h.hash,
+    });
+    issuerAllowed(issuer.account_data);
+  }
   let tx = {
     Account: c.trader.address,
     Sequence: w.sequence,

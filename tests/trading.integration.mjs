@@ -38,6 +38,7 @@ const auth = getAuth(),
   trader = Wallet.generate(),
   recipient = Wallet.generate();
 const realFetch = global.fetch;
+let frozenLine = false;
 let hasLine = false,
   walletBalance = "100000000",
   tokenBalance = "100",
@@ -102,6 +103,7 @@ function ledgerFetch() {
                 {
                   currency: RLUSD.currency,
                   account: RLUSD.issuer,
+                  freeze_peer: frozenLine,
                   balance: tokenBalance,
                   limit: "1000",
                 },
@@ -231,6 +233,7 @@ async function reset() {
     },
   });
   await ensureState();
+  frozenLine = false;
   hasLine = false;
   walletBalance = "100000000";
   tokenBalance = "100";
@@ -762,6 +765,43 @@ test("Owner-only Mainnet API and durable engine", async (t) => {
       assert.equal((await rootRef().get()).data().mode, "paused");
       await acknowledgeBalances();
       assert.equal((await rootRef().get()).data().discrepancy, null);
+    },
+  );
+  await t.test(
+    "frozen RLUSD cannot prevent a native XRP withdrawal",
+    async () => {
+      await reset();
+      hasLine = true;
+      frozenLine = true;
+      await saveReturnAddress(
+        { address: recipient.classicAddress, tag: null },
+        { token: { auth_time: Date.now() / 1000 } },
+      );
+      await walletRequest({
+        action: "withdraw",
+        requestId: "native-frozen-123",
+        amount: "1",
+        currency: "XRP",
+      });
+      await processPending({ signer: trader, sleep: async () => {} });
+      const i = (
+        await rootRef().collection("intents").doc("native-frozen-123").get()
+      ).data();
+      assert.equal(i.status, "validated", i.error);
+      await walletRequest({
+        action: "withdraw",
+        requestId: "issued-frozen-123",
+        amount: "1",
+        currency: "RLUSD",
+      });
+      await processPending({ signer: trader, sleep: async () => {} });
+      assert.equal(submits, 1);
+      assert.match(
+        (
+          await rootRef().collection("intents").doc("issued-frozen-123").get()
+        ).data().error,
+        /frozen/,
+      );
     },
   );
   global.fetch = realFetch;

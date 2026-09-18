@@ -8,7 +8,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.js",
-    "lint": "node --check index.js && node --check policy.js && node --check testnet/ledger.js && node --check testnet/service.js"
+    "lint": "node --check index.js && node --check policy.js && node --check mainnet/ledger.js && node --check mainnet/service.js && node --check mainnet/worker.js && node --check mainnet/analyst.js"
   },
   "dependencies": {
     "@google-cloud/secret-manager": "^7.1.0",

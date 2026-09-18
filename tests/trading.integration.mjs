@@ -9,14 +9,21 @@ import {
   hashes,
 } from "../functions/node_modules/xrpl/dist/npm/index.js";
 import {
+  automation,
+  acknowledgeBalances,
+  saveSettings,
+  saveReturnAddress,
+  request as walletRequest,
+} from "../functions/mainnet/service.js";
+import {
   ensureState,
   rootRef,
   enqueue,
-  automation,
-  processPending,
   takeLease,
-  finish,
-} from "../functions/testnet/service.js";
+} from "../functions/mainnet/state.js";
+import { processPending, finish } from "../functions/mainnet/worker.js";
+import { RLUSD, D } from "../functions/mainnet/config.js";
+import { reserveCost, settleCost } from "../functions/mainnet/analyst.js";
 import { tradingOwner } from "../functions/trading/access.js";
 if (
   !process.env.FIRESTORE_EMULATOR_HOST ||
@@ -31,6 +38,11 @@ const auth = getAuth(),
   trader = Wallet.generate(),
   recipient = Wallet.generate();
 const realFetch = global.fetch;
+let hasLine = false,
+  walletBalance = "100000000",
+  tokenBalance = "100",
+  metas = new Map(),
+  thin = false;
 let missingAccount = false,
   gap = false,
   feeHook = null;
@@ -38,12 +50,12 @@ let sequence = 10,
   submitted = new Map(),
   submits = 0,
   simulateTimeout = false,
-  network = 1,
+  network = 0,
   ledgerIndex = 1000,
   hook = null;
 function ledgerFetch() {
   global.fetch = async (url, opts) => {
-    if (!String(url).startsWith("https://s.altnet."))
+    if (!String(url).startsWith("https://s1.ripple.com"))
       return realFetch(url, opts);
     const {
       method,
@@ -76,7 +88,7 @@ function ledgerFetch() {
         }
         result = {
           account_data: {
-            Balance: "100000000",
+            Balance: walletBalance,
             OwnerCount: 0,
             Sequence: sequence,
             Flags: 8388608,
@@ -84,7 +96,39 @@ function ledgerFetch() {
         };
         break;
       case "account_lines":
-        result = { lines: [] };
+        result = {
+          lines: hasLine
+            ? [
+                {
+                  currency: RLUSD.currency,
+                  account: RLUSD.issuer,
+                  balance: tokenBalance,
+                  limit: "1000",
+                },
+              ]
+            : [],
+        };
+        break;
+      case "book_offers":
+        result = {
+          ledger_hash: p.ledger_hash,
+          ledger_index: ledgerIndex,
+          offers: thin
+            ? []
+            : p.taker_gets.currency === "XRP"
+              ? [
+                  {
+                    TakerGets: "100000000",
+                    TakerPays: { ...RLUSD, value: "130" },
+                  },
+                ]
+              : [
+                  {
+                    TakerGets: { ...RLUSD, value: "129.99" },
+                    TakerPays: "100000000",
+                  },
+                ],
+        };
         break;
       case "fee":
         if (feeHook) await feeHook();
@@ -94,6 +138,60 @@ function ledgerFetch() {
         submits++;
         const tx = decode(p.tx_blob);
         const hash = hashes.hashSignedTx(p.tx_blob);
+        const before = walletBalance,
+          oldToken = tokenBalance;
+        let delta = D(0),
+          td = D(0);
+        if (tx.TransactionType === "OfferCreate") {
+          const buy = typeof tx.TakerGets === "object";
+          delta = D(buy ? "7.69" : "-3");
+          td = D(buy ? "-10" : "3.9");
+        }
+        if (tx.TransactionType === "Payment") {
+          if (typeof tx.Amount === "string")
+            delta = D(tx.Amount).div(1e6).neg();
+          else td = D(tx.Amount.value).neg();
+        }
+        walletBalance = D(before).plus(delta.mul(1e6)).minus(tx.Fee).toFixed(0);
+        tokenBalance = D(oldToken).plus(td).toString();
+        const nodes = [
+          {
+            ModifiedNode: {
+              LedgerEntryType: "AccountRoot",
+              PreviousFields: { Balance: before },
+              FinalFields: {
+                Account: trader.classicAddress,
+                Balance: walletBalance,
+              },
+            },
+          },
+        ];
+        if (!td.eq(0))
+          nodes.push({
+            ModifiedNode: {
+              LedgerEntryType: "RippleState",
+              PreviousFields: {
+                Balance: { currency: RLUSD.currency, value: oldToken },
+              },
+              FinalFields: {
+                Balance: { currency: RLUSD.currency, value: tokenBalance },
+                LowLimit: {
+                  currency: RLUSD.currency,
+                  issuer: trader.classicAddress,
+                  value: "1000",
+                },
+                HighLimit: {
+                  currency: RLUSD.currency,
+                  issuer: RLUSD.issuer,
+                  value: "0",
+                },
+              },
+            },
+          });
+        metas.set(hash, {
+          TransactionResult: "tesSUCCESS",
+          AffectedNodes: nodes,
+        });
         submitted.set(hash, tx);
         sequence++;
         if (hook) await hook();
@@ -109,21 +207,7 @@ function ledgerFetch() {
                 validated: true,
                 tx_json: { ...tx, date: now },
                 ledger_index: ledgerIndex,
-                meta: {
-                  TransactionResult: "tesSUCCESS",
-                  AffectedNodes: [
-                    {
-                      ModifiedNode: {
-                        LedgerEntryType: "AccountRoot",
-                        PreviousFields: { Balance: "100000000" },
-                        FinalFields: {
-                          Account: trader.classicAddress,
-                          Balance: "98999988",
-                        },
-                      },
-                    },
-                  ],
-                },
+                meta: metas.get(p.transaction),
               }
             : { error: "txnNotFound", searched_all: !gap };
         break;
@@ -137,17 +221,21 @@ function ledgerFetch() {
 async function reset() {
   await db.recursiveDelete(rootRef());
   await rootRef().set({
-    network: "testnet",
-    networkId: 1,
+    network: "mainnet",
+    networkId: 0,
     provisioning: "ready",
     trader: {
       address: trader.classicAddress,
       secretVersion:
-        "projects/irobotxsite/secrets/XRPL_TESTNET_TRADER_SEED/versions/1",
+        "projects/irobotxsite/secrets/XRPL_MAINNET_TRADER_SEED/versions/1",
     },
-    receiver: { address: recipient.classicAddress },
   });
   await ensureState();
+  hasLine = false;
+  walletBalance = "100000000";
+  tokenBalance = "100";
+  metas = new Map();
+  thin = false;
   missingAccount = false;
   gap = false;
   feeHook = null;
@@ -155,7 +243,7 @@ async function reset() {
   submitted = new Map();
   submits = 0;
   simulateTimeout = false;
-  network = 1;
+  network = 0;
   ledgerIndex = 1000;
   hook = null;
   await auth.updateUser(owner, { disabled: false });
@@ -198,16 +286,18 @@ async function call(name, data, token) {
 }
 const ownerToken = await seed(owner);
 const other = await seed("other-admin");
-test("Owner-only Testnet API and durable engine", async (t) => {
+test("Owner-only Mainnet API and durable engine", async (t) => {
   await t.test(
     "All callable interfaces reject anonymous and other administrator",
     async () => {
       for (const name of [
-        "testnetDashboard",
-        "testnetDiscover",
-        "testnetRequest",
-        "testnetAutomation",
-        "testnetHistory",
+        "mainnetDashboard",
+        "mainnetSettings",
+        "mainnetRequest",
+        "mainnetAutomation",
+        "mainnetHistory",
+        "mainnetReturnAddress",
+        "mainnetAcknowledgeBalances",
       ]) {
         assert.equal((await call(name, {})).error.status, "UNAUTHENTICATED");
         assert.equal(
@@ -220,7 +310,7 @@ test("Owner-only Testnet API and durable engine", async (t) => {
   await t.test(
     "Browser Firestore reads and writes remain denied to the owner",
     async () => {
-      const url = `http://127.0.0.1:8080/v1/projects/demo-irobotx/databases/(default)/documents/xrplTestnet/${owner}`;
+      const url = `http://127.0.0.1:8080/v1/projects/demo-irobotx/databases/(default)/documents/xrplMainnet/${owner}`;
       const headers = {
         Authorization: `Bearer ${ownerToken}`,
         "Content-Type": "application/json",
@@ -246,8 +336,8 @@ test("Owner-only Testnet API and durable engine", async (t) => {
     async () => {
       await reset();
       await Promise.all([
-        enqueue("payment", "duplicate-request"),
-        enqueue("payment", "duplicate-request"),
+        enqueue("trust", "duplicate-request"),
+        enqueue("trust", "duplicate-request"),
       ]);
       assert.equal((await rootRef().collection("intents").get()).size, 1);
       await assert.rejects(() => enqueue("buy", "duplicate-request"));
@@ -257,23 +347,23 @@ test("Owner-only Testnet API and durable engine", async (t) => {
     "Overlapping workers acquire only one durable lease",
     async () => {
       await reset();
-      await enqueue("payment", "lease-request");
+      await enqueue("trust", "lease-request");
       const leases = await Promise.all([takeLease(), takeLease()]);
       assert.equal(leases.filter(Boolean).length, 1);
     },
   );
   await t.test(
-    "Payment is signed, persisted, submitted once and validated from metadata",
+    "Trust-line setup is signed, persisted once and validated from metadata",
     async () => {
       await reset();
-      await enqueue("payment", "payment-request");
+      await enqueue("trust", "payment-request");
       await processPending({ signer: trader, sleep: async () => {} });
       const i = (
         await rootRef().collection("intents").doc("payment-request").get()
       ).data();
       assert.equal(i.status, "validated");
       assert.equal(i.result.fee, "0.000012");
-      assert.equal(i.result.xrpChange, "-1.000012");
+      assert.equal(i.result.xrpChange, "-0.000012");
       assert.equal(submits, 1);
       assert.ok(
         (
@@ -286,8 +376,8 @@ test("Owner-only Testnet API and durable engine", async (t) => {
   );
   await t.test("Pause before submission cancels queued intent", async () => {
     await reset();
-    await enqueue("payment", "pause-request");
-    await automation(false);
+    await enqueue("trust", "pause-request");
+    await automation("paused");
     await processPending({ signer: trader, sleep: async () => {} });
     assert.equal(submits, 0);
     assert.equal(
@@ -300,8 +390,8 @@ test("Owner-only Testnet API and durable engine", async (t) => {
     "Pause after submit retains validated result and stops future work",
     async () => {
       await reset();
-      await enqueue("payment", "pause-after-request");
-      hook = () => automation(false);
+      await enqueue("trust", "pause-after-request");
+      hook = () => automation("paused");
       await processPending({ signer: trader, sleep: async () => {} });
       assert.equal(submits, 1);
       assert.equal(
@@ -318,7 +408,7 @@ test("Owner-only Testnet API and durable engine", async (t) => {
     async () => {
       await reset();
       simulateTimeout = true;
-      await enqueue("payment", "timeout-request");
+      await enqueue("trust", "timeout-request");
       await processPending({ signer: trader, sleep: async () => {} });
       assert.equal(
         (
@@ -342,7 +432,7 @@ test("Owner-only Testnet API and durable engine", async (t) => {
     async () => {
       await reset();
       simulateTimeout = true;
-      await enqueue("payment", "expiry-request");
+      await enqueue("trust", "expiry-request");
       await processPending({ signer: trader, sleep: async () => {} });
       submitted.clear();
       sequence = 10;
@@ -359,15 +449,15 @@ test("Owner-only Testnet API and durable engine", async (t) => {
   );
   await t.test("Network mismatch never signs or submits", async () => {
     await reset();
-    network = 0;
-    await enqueue("payment", "network-request");
+    network = 1;
+    await enqueue("trust", "network-request");
     await processPending({ signer: trader, sleep: async () => {} });
     assert.equal(submits, 0);
     assert.equal((await rootRef().collection("payloads").get()).size, 0);
   });
   await t.test("Disabled owner prevents worker execution", async () => {
     await reset();
-    await enqueue("payment", "disabled-request");
+    await enqueue("trust", "disabled-request");
     await auth.updateUser(owner, { disabled: true });
     await processPending({ signer: trader, sleep: async () => {} });
     assert.equal(submits, 0);
@@ -384,20 +474,21 @@ test("Owner-only Testnet API and durable engine", async (t) => {
           tradingFees: "0",
           setupFees: "0",
         },
-        asset: { currency: "USD", issuer: recipient.classicAddress },
+        exit: { startedAt: Date.now(), attempts: 0 },
       });
       await enqueue("sell", "partial-request");
       const lease = await takeLease();
       await finish(lease, "validated", null, {
         fee: ".00001",
-        tokenChange: "-1",
-        tradeXrp: ".49",
+        tokenChange: ".49",
+        tradeXrp: "-1",
+        markPrice: "0.5",
         result: "tesSUCCESS",
       });
       const p = (await rootRef().get()).data().position;
       assert.equal(p.quantity, "1");
       assert.equal(p.cost, "0.5");
-      assert.equal(p.realized, "-0.01001");
+      assert.equal(p.realized, "-0.010005");
       await assert.rejects(() => enqueue("buy", "another-buy-request"));
     },
   );
@@ -405,12 +496,11 @@ test("Owner-only Testnet API and durable engine", async (t) => {
     "Crash after payload persistence resumes the same signed hash",
     async () => {
       await reset();
-      await enqueue("payment", "persisted-request");
+      await enqueue("trust", "persisted-request");
       const signed = trader.sign({
-        TransactionType: "Payment",
+        TransactionType: "TrustSet",
         Account: trader.classicAddress,
-        Destination: recipient.classicAddress,
-        Amount: "1000000",
+        LimitAmount: { ...RLUSD, value: "1000" },
         Sequence: 10,
         Fee: "12",
         LastLedgerSequence: 1004,
@@ -427,6 +517,7 @@ test("Owner-only Testnet API and durable engine", async (t) => {
         firstLedger: 1000,
         lastLedger: 1004,
         quoteAt: Date.now(),
+        markPrice: "0",
       });
       await processPending({ sleep: async () => {} });
       const result = (
@@ -441,10 +532,10 @@ test("Owner-only Testnet API and durable engine", async (t) => {
     "Pause during execution preparation prevents submission",
     async () => {
       await reset();
-      await enqueue("payment", "inflight-pause-request");
+      await enqueue("trust", "inflight-pause-request");
       let count = 0;
       feeHook = async () => {
-        if (++count === 2) await automation(false);
+        if (++count === 2) await automation("paused");
       };
       await processPending({ signer: trader, sleep: async () => {} });
       assert.equal(submits, 0);
@@ -459,28 +550,24 @@ test("Owner-only Testnet API and durable engine", async (t) => {
       );
     },
   );
-  await t.test(
-    "Account disappearance after Testnet reset stops signing",
-    async () => {
-      await reset();
-      await enqueue("payment", "reset-request");
-      missingAccount = true;
-      await processPending({ signer: trader, sleep: async () => {} });
-      assert.equal(submits, 0);
-      assert.match(
-        (
-          await rootRef().collection("intents").doc("reset-request").get()
-        ).data().error,
-        /reset/,
-      );
-    },
-  );
+  await t.test("Unfunded account stops signing", async () => {
+    await reset();
+    await enqueue("trust", "reset-request");
+    missingAccount = true;
+    await processPending({ signer: trader, sleep: async () => {} });
+    assert.equal(submits, 0);
+    assert.match(
+      (await rootRef().collection("intents").doc("reset-request").get()).data()
+        .error,
+      /fund/i,
+    );
+  });
   await t.test(
     "A gap in ledger history keeps an ambiguous transaction pending",
     async () => {
       await reset();
       simulateTimeout = true;
-      await enqueue("payment", "history-gap-request");
+      await enqueue("trust", "history-gap-request");
       await processPending({ signer: trader, sleep: async () => {} });
       submitted.clear();
       sequence = 10;
@@ -494,6 +581,187 @@ test("Owner-only Testnet API and durable engine", async (t) => {
         "pending",
       );
       assert.equal(submits, 1);
+    },
+  );
+
+  await t.test(
+    "AI-approved buy signs correct direction and consumes approval exactly once",
+    async () => {
+      await reset();
+      hasLine = true;
+      const newsAt = Date.now();
+      await rootRef().update({
+        news: { at: newsAt, articles: [] },
+        enabled: true,
+        mode: "running",
+        analysis: {
+          id: "decision-123",
+          newsAt,
+          verdict: "allow",
+          expiresAt: Date.now() + 300000,
+          revision: 0,
+          pair: "XRP-RLUSD",
+          positionKey: "0:0",
+          usedBy: null,
+        },
+      });
+      await enqueue("buy", "mainnet-buy-123", { automatic: true });
+      await processPending({ signer: trader, sleep: async () => {} });
+      const c = (await rootRef().get()).data(),
+        i = (
+          await rootRef().collection("intents").doc("mainnet-buy-123").get()
+        ).data();
+      assert.equal(i.status, "validated", i.error);
+      assert.equal(c.position.quantity, "7.69");
+      assert.equal(c.budget.spent, "10");
+      assert.equal(c.analysis.usedBy, "mainnet-buy-123");
+      const tx = [...submitted.values()][0];
+      assert.equal(tx.TakerGets.issuer, RLUSD.issuer);
+      assert.equal(typeof tx.TakerPays, "string");
+      await assert.rejects(() =>
+        enqueue("buy", "another-entry-123", { automatic: true }),
+      );
+      await rootRef().update({
+        exit: { startedAt: Date.now(), attempts: 0 },
+        mode: "closing",
+      });
+      await enqueue("sell", "mainnet-sell-123", { automatic: true });
+      await processPending({ signer: trader, sleep: async () => {} });
+      const sold = (
+        await rootRef().collection("intents").doc("mainnet-sell-123").get()
+      ).data();
+      assert.equal(sold.status, "validated", sold.error);
+      assert.equal((await rootRef().get()).data().position.quantity, "4.69");
+      assert.equal(submits, 2);
+    },
+  );
+  await t.test(
+    "expired AI approval and unavailable liquidity never buy",
+    async () => {
+      await reset();
+      hasLine = true;
+      const newsAt = Date.now();
+      await rootRef().update({
+        news: { at: newsAt, articles: [] },
+        enabled: true,
+        mode: "running",
+        analysis: {
+          id: "decision-123",
+          newsAt,
+          verdict: "allow",
+          expiresAt: 0,
+          revision: 0,
+          pair: "XRP-RLUSD",
+          positionKey: "0:0",
+        },
+      });
+      await assert.rejects(() =>
+        enqueue("buy", "expired-ai-buy", { automatic: true }),
+      );
+      await rootRef().update({ "analysis.expiresAt": Date.now() + 300000 });
+      await enqueue("buy", "thin-buy-123", { automatic: true });
+      thin = true;
+      await processPending({ signer: trader, sleep: async () => {} });
+      assert.equal(submits, 0);
+    },
+  );
+  await t.test("settings change cancels previously queued work", async () => {
+    await reset();
+    await enqueue("trust", "settings-request");
+    await saveSettings({ analysisMinutes: 30 });
+    await processPending({ signer: trader, sleep: async () => {} });
+    assert.equal(submits, 0);
+    assert.equal((await rootRef().get()).data().mode, "paused");
+  });
+  await t.test(
+    "withdrawal validates saved address, recent sign-in, pause and exact action",
+    async () => {
+      await reset();
+      await assert.rejects(() =>
+        saveReturnAddress(
+          { address: recipient.classicAddress, tag: null },
+          { token: { auth_time: 0 } },
+        ),
+      );
+      await saveReturnAddress(
+        { address: recipient.classicAddress, tag: null },
+        { token: { auth_time: Date.now() / 1000 } },
+      );
+      await assert.rejects(() =>
+        walletRequest({
+          action: "withdraw",
+          requestId: "bad-withdraw-123",
+          amount: "1",
+          currency: "XRP",
+          destination: trader.classicAddress,
+        }),
+      );
+      await walletRequest({
+        action: "withdraw",
+        requestId: "withdraw-good-123",
+        amount: "1",
+        currency: "XRP",
+      });
+      await processPending({ signer: trader, sleep: async () => {} });
+      const i = (
+        await rootRef().collection("intents").doc("withdraw-good-123").get()
+      ).data();
+      assert.equal(i.status, "validated", i.error);
+      assert.equal(
+        [...submitted.values()][0].Destination,
+        recipient.classicAddress,
+      );
+      assert.equal((await rootRef().get()).data().position.realized, "0");
+    },
+  );
+  await t.test(
+    "concurrent AI reservations cannot overbook budget and settlement is idempotent",
+    async () => {
+      await reset();
+      await rootRef().update({ "settings.aiBudget": ".30" });
+      const all = await Promise.allSettled([
+        reserveCost(".20"),
+        reserveCost(".20"),
+      ]);
+      assert.equal(all.filter((r) => r.status === "fulfilled").length, 1);
+      const reservation = all.find((r) => r.status === "fulfilled").value;
+      await settleCost(reservation, {
+        usage: { input_tokens: 1000, output_tokens: 100 },
+        output: [],
+      });
+      await settleCost(reservation, {
+        usage: { input_tokens: 1000, output_tokens: 100 },
+        output: [],
+      });
+      assert.equal((await rootRef().get()).data().aiUsage.spent, "0.0037");
+    },
+  );
+  await t.test(
+    "explicit close can resolve a tracked position after an external deposit",
+    async () => {
+      await reset();
+      hasLine = true;
+      await rootRef().update({
+        position: {
+          quantity: "3",
+          cost: "3.9",
+          realized: "0",
+          tradingFees: "0",
+          setupFees: "0",
+        },
+        discrepancy: { reason: "external deposit" },
+        expected: { xrp: "99", rlusd: "100", ledger: 1000 },
+      });
+      await automation("closing");
+      await enqueue("sell", "close-after-deposit", { automatic: true });
+      await processPending({ signer: trader, sleep: async () => {} });
+      const i = (
+        await rootRef().collection("intents").doc("close-after-deposit").get()
+      ).data();
+      assert.equal(i.status, "validated", i.error);
+      assert.equal((await rootRef().get()).data().mode, "paused");
+      await acknowledgeBalances();
+      assert.equal((await rootRef().get()).data().discrepancy, null);
     },
   );
   global.fetch = realFetch;

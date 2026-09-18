@@ -19,7 +19,7 @@ export const MINI_APPS: MiniApp[] = [
   {
     id: "trading",
     label: "XRP Trading",
-    description: "Test real XRPL transactions with a dedicated Testnet wallet.",
+    description: "Automate XRP/RLUSD trading with market rules and AI risk review.",
     path: "/portal/trading",
     icon: ChartCandlestick,
     access: "owner",

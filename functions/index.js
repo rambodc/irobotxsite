@@ -406,6 +406,8 @@ export const submitContact = endpoint(mailBase, async (request) => {
 
 export { demoChat } from './demo-ai.js';
 
-import { createTestnetHandlers } from './testnet/service.js';
-export const { testnetDashboard, testnetDiscover, testnetRequest, testnetAutomation, testnetHistory } = createTestnetHandlers({ endpoint, base, current, rate });
-export { testnetWorker, testnetTick } from './testnet/service.js';
+import { createMainnetHandlers } from './mainnet/service.js';
+export const { mainnetDashboard, mainnetSettings, mainnetAutomation, mainnetRequest, mainnetReturnAddress, mainnetHistory, mainnetAcknowledgeBalances } = createMainnetHandlers({ endpoint, base, current, rate });
+export { mainnetWorker } from './mainnet/worker.js';
+export { mainnetTick } from './mainnet/service.js';
+export { mainnetAnalyst } from './mainnet/analyst.js';

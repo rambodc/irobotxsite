@@ -1,8 +1,12 @@
 name: "Production: Firebase Functions"
 on:
   workflow_call:
+    inputs:
+      targets:
+        type: string
+        default: functions
   workflow_dispatch:
-permissions: { contents: read, id-token: write }
+permissions: { contents: write, id-token: write }
 jobs:
   deploy:
     if: github.ref == 'refs/heads/production'
@@ -20,4 +24,11 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
       - run: npm install --global firebase-tools@14.15.2
-      - run: firebase deploy --only functions --project irobotxsite --non-interactive
+      - name: Deploy affected functions
+        env:
+          FUNCTION_TARGETS: ${{ inputs.targets || 'functions' }}
+        run: firebase deploy --only "$FUNCTION_TARGETS" --project irobotxsite --non-interactive
+      - name: Record successful functions deployment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/record-deployment.mjs functions

@@ -11,36 +11,47 @@ import { tradingApi } from "../src/mini-apps/trading/api";
 vi.mock("../src/mini-apps/trading/api", () => ({
   tradingApi: {
     dashboard: vi.fn(),
-    discover: vi.fn(),
+    settings: vi.fn(),
     request: vi.fn(),
     automation: vi.fn(),
     history: vi.fn(),
+    returnAddress: vi.fn(),
+    reauthenticate: vi.fn(),
+    acknowledgeBalances: vi.fn(),
   },
   tradingError: (e: Error) => e.message,
 }));
 const data = {
-  network: "testnet",
+  network: "mainnet",
   trader: "rTrader",
-  receiver: "rReceiver",
-  provisioning: "ready",
   enabled: false,
+  mode: "paused",
   pending: null,
+  settings: {
+    pair: "XRP-RLUSD",
+    analysisMinutes: 20,
+    newsMinutes: 60,
+    purchase: "10",
+    positionCap: "50",
+    dailyPurchases: "50",
+    dailyLoss: "5",
+    stopLoss: "2",
+    takeProfit: "3",
+    spread: "0.5",
+    movement: "0.5",
+    aiBudget: "3",
+  },
   wallet: {
     funded: true,
-    balance: "100",
-    available: "99",
-    reserve: "1",
-    lines: [],
+    balance: "7",
+    rlusd: "50",
+    available: "5.8",
+    reserve: "1.2",
+    trustReady: true,
+    fundingMinimum: "6.22",
   },
-  market: {
-    symbol: "USD",
-    asset: { currency: "USD", issuer: "rIssuer" },
-    eligible: true,
-    reason: "Eligible test market",
-    source: "Testnet",
-    at: Date.now(),
-  },
-  run: null,
+  pairs: [{ id: "XRP-RLUSD", label: "XRP / RLUSD" }],
+  market: { eligible: true, reason: "Validated funded book.", at: Date.now() },
   position: {
     quantity: "0",
     cost: "0",
@@ -49,70 +60,116 @@ const data = {
     setupFees: "0",
   },
   health: {},
+  signal: { action: "WAIT", reason: "Warming up" },
+  analysis: null,
+  news: null,
+  aiUsage: { day: "", spent: "0" },
+  budget: { day: "", spent: "0" },
   transactions: [],
+  nextAnalysisAt: 0,
+  nextNewsAt: 0,
+  returnAddress: null,
+  discrepancy: null,
 };
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(tradingApi.dashboard).mockResolvedValue(data as never);
+  vi.mocked(tradingApi.dashboard).mockResolvedValue(
+    structuredClone(data) as never,
+  );
   vi.mocked(tradingApi.history).mockResolvedValue({
     transactions: [],
     cursor: null,
   });
+  vi.spyOn(window, "confirm").mockReturnValue(true);
 });
-afterEach(cleanup);
-describe("Testnet mini app", () => {
-  it("labels test funds and ledger balances without paper trading", async () => {
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+describe("Mainnet trading workspace", () => {
+  it("labels real money and defaults to stopped", async () => {
     render(<TradingApp />);
-    await screen.findByText("100 XRP");
-    expect(screen.getByText("XRPL Testnet — test funds only")).toBeTruthy();
-    expect(screen.queryByText("PAPER ONLY")).toBeNull();
+    await screen.findByText("7 XRP");
+    expect(screen.getByText("XRPL Mainnet — real funds")).toBeTruthy();
+    expect(screen.getByText("Automation stopped")).toBeTruthy();
   });
-  it("uses fixed actions and request IDs instead of raw transactions", async () => {
+  it("Start requires explicit confirmation", async () => {
     render(<TradingApp />);
-    await screen.findByText("100 XRP");
-    fireEvent.click(screen.getByText("Run Test"));
-    fireEvent.click(screen.getByText("Send test payment"));
+    await screen.findByText("7 XRP");
+    fireEvent.click(screen.getByText("Start"));
     await waitFor(() =>
-      expect(tradingApi.request).toHaveBeenCalledWith(
-        "payment",
-        expect.any(String),
+      expect(tradingApi.automation).toHaveBeenCalledWith("running"),
+    );
+    expect(window.confirm).toHaveBeenCalled();
+  });
+  it("cancelled Start never calls backend", async () => {
+    vi.mocked(window.confirm).mockReturnValue(false);
+    render(<TradingApp />);
+    await screen.findByText("7 XRP");
+    fireEvent.click(screen.getByText("Start"));
+    expect(tradingApi.automation).not.toHaveBeenCalled();
+  });
+  it("Pause is distinct from closing and works while a transaction is pending", async () => {
+    vi.mocked(tradingApi.dashboard).mockResolvedValue({
+      ...data,
+      pending: "queued",
+      enabled: true,
+      mode: "running",
+    } as never);
+    render(<TradingApp />);
+    await screen.findByText("7 XRP");
+    fireEvent.click(screen.getByText("Pause"));
+    await waitFor(() =>
+      expect(tradingApi.automation).toHaveBeenCalledWith("paused"),
+    );
+  });
+  it("settings expose minutes and amounts and pause when saved", async () => {
+    render(<TradingApp />);
+    await screen.findByText("7 XRP");
+    fireEvent.click(screen.getByText("Automation"));
+    fireEvent.change(screen.getByLabelText("AI / entry check (minutes)"), {
+      target: { value: "30" },
+    });
+    fireEvent.click(screen.getByText("Save settings & pause"));
+    await waitFor(() =>
+      expect(tradingApi.settings).toHaveBeenCalledWith(
+        expect.objectContaining({ analysisMinutes: 30, purchase: "10" }),
       ),
     );
   });
-  it("exposes pause while a submitted trade is pending", async () => {
+  it("shows explanations and API usage in Analysis", async () => {
+    render(<TradingApp />);
+    await screen.findByText("7 XRP");
+    fireEvent.click(screen.getByText("Analysis"));
+    expect(screen.getByText("AI entry review")).toBeTruthy();
+    expect(screen.getByText("News research has not completed.")).toBeTruthy();
+  });
+  it("history uses validated outcomes and paginated interface", async () => {
+    render(<TradingApp />);
+    await screen.findByText("7 XRP");
+    fireEvent.click(screen.getByText("Activity"));
+    await waitFor(() => expect(tradingApi.history).toHaveBeenCalledWith(null));
+    expect(screen.getByText("No Mainnet transactions yet.")).toBeTruthy();
+  });
+  it("unfunded wallet cannot start", async () => {
     vi.mocked(tradingApi.dashboard).mockResolvedValue({
       ...data,
-      enabled: true,
-      pending: "pending123",
-      transactions: [
-        { id: "pending123", action: "buy", status: "submitted", createdAt: 1 },
-      ],
+      wallet: { ...data.wallet, funded: false },
     } as never);
     render(<TradingApp />);
-    await screen.findByText(/Waiting for validation/);
-    fireEvent.click(screen.getByText("Run Test"));
-    fireEvent.click(screen.getByText("Pause run"));
-    await waitFor(() =>
-      expect(tradingApi.automation).toHaveBeenCalledWith(false),
+    await screen.findByText("7 XRP");
+    expect((screen.getByText("Start") as HTMLButtonElement).disabled).toBe(
+      true,
     );
   });
-  it("displays issuer identity with explicit test asset label", async () => {
+  it("withdrawals remain disabled without a saved return address", async () => {
     render(<TradingApp />);
-    await screen.findByText("100 XRP");
-    fireEvent.click(screen.getByText("Market"));
-    expect(screen.getByText("TEST ASSET")).toBeTruthy();
-    expect(screen.getByText("rIssuer")).toBeTruthy();
-  });
-  it("never displays pending as validated", async () => {
-    vi.mocked(tradingApi.dashboard).mockResolvedValue({
-      ...data,
-      pending: "pending123",
-      transactions: [
-        { id: "pending123", action: "buy", status: "pending", createdAt: 1 },
-      ],
-    } as never);
-    render(<TradingApp />);
-    await screen.findByText(/Waiting for validation/);
-    expect(screen.queryByText("tesSUCCESS")).toBeNull();
+    await screen.findByText("7 XRP");
+    fireEvent.change(screen.getByLabelText("Withdrawal amount"), {
+      target: { value: "1" },
+    });
+    expect(
+      (screen.getByText("Review withdrawal") as HTMLButtonElement).disabled,
+    ).toBe(true);
   });
 });

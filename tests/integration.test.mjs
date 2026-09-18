@@ -314,17 +314,21 @@ test("Firebase authorization, invitations, rules and mail lifecycle", async (t) 
         await page
           .getByRole("button", { name: "Sign in", exact: true })
           .click();
-        await page.getByRole("heading", { name: "Welcome, Test." }).waitFor();
+        await page.getByRole("region", { name: "Your mini apps" }).waitFor();
         await page.screenshot({ path: "/tmp/irobotx-admin-portal.png" });
         await page
-          .getByRole("navigation", { name: "Workspace navigation" })
-          .getByRole("link", { name: "Account", exact: true })
+          .getByRole("region", { name: "Your mini apps" })
+          .getByRole("link", { name: /^Account/ })
           .click();
         await page.getByLabel("Full name").fill("Admin Updated");
         await page.getByRole("button", { name: "Save changes" }).click();
         await page.getByText("Your account has been updated.").waitFor();
         await page
-          .getByRole("link", { name: "User access", exact: true })
+          .getByRole("link", { name: "Back to mini apps", exact: true })
+          .click();
+        await page
+          .getByRole("region", { name: "Your mini apps" })
+          .getByRole("link", { name: /^User Access/ })
           .click();
         await page.getByLabel("Full name").fill("Browser Invite");
         await page
@@ -351,7 +355,7 @@ test("Firebase authorization, invitations, rules and mail lifecycle", async (t) 
           .getByRole("button", { name: "Sign in", exact: true })
           .click();
         await page
-          .getByRole("heading", { name: "Welcome, Invited." })
+          .getByRole("region", { name: "Your mini apps" })
           .waitFor()
           .catch(async (error) => {
             console.log(
@@ -361,13 +365,13 @@ test("Firebase authorization, invitations, rules and mail lifecycle", async (t) 
             throw error;
           });
         assert.equal(
-          await page
-            .getByRole("link", { name: "User access", exact: true })
-            .count(),
+          await page.getByRole("link", { name: /^User Access/ }).count(),
           0,
         );
         await page.goto("http://127.0.0.1:5180/portal/admin");
-        await page.getByText("Administrator access is required.").waitFor();
+        await page
+          .getByText("This app is not available to your account.")
+          .waitFor();
       } finally {
         await browser?.close();
         server.kill();

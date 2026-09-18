@@ -9,7 +9,7 @@ on:
         type: choice
         options: [hosting, functions, rules, all]
         default: hosting
-permissions: { contents: read, id-token: write }
+permissions: { contents: write, id-token: write }
 concurrency: { group: irobotx-production, cancel-in-progress: false }
 jobs:
   changes:
@@ -19,9 +19,11 @@ jobs:
       hosting: ${{ steps.scope.outputs.hosting }}
       functions: ${{ steps.scope.outputs.functions }}
       rules: ${{ steps.scope.outputs.rules }}
+      targets: ${{ steps.scope.outputs.targets }}
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
+      - run: node --test tests/change-scope.test.mjs
       - id: scope
         env:
           BASE_SHA: ${{ github.event.before }}
@@ -37,6 +39,8 @@ jobs:
     needs: [changes, rules]
     if: ${{ !cancelled() && needs.changes.result == 'success' && needs.changes.outputs.functions == 'true' && (needs.rules.result == 'success' || needs.rules.result == 'skipped') }}
     uses: ./.github/workflows/firebase-functions-merge.yml
+    with:
+      targets: ${{ needs.changes.outputs.targets }}
     secrets: inherit
   hosting:
     needs: [changes, rules, functions]

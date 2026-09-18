@@ -1,42 +1,16 @@
 import Decimal from "decimal.js";
-import { isValidClassicAddress, getBalanceChanges } from "xrpl";
-export const D = (v) => new Decimal(v);
-export const RPC = "https://s.altnet.rippletest.net:51234/";
-export const LIMITS = Object.freeze({
-  purchase: "1",
-  daily: "10",
-  buffer: "5",
-  feeDrops: 10000,
-  spread: "0.01",
-  movement: "0.005",
-  cycles: 3,
-  attempts: 5,
-  duration: 600000,
-});
+import { getBalanceChanges } from "xrpl";
+import { D, RLUSD, LIMITS } from "./config.js";
+export { D, LIMITS };
+export const RPC = "https://s1.ripple.com:51234/";
 export const xrp = (drops) => D(drops).div(1e6);
 export const drops = (value) => D(value).mul(1e6).floor().toFixed(0);
 export const issued = (value) =>
   D(value).toSignificantDigits(16, Decimal.ROUND_DOWN).toString();
-export function assetValid(a) {
-  return (
-    a &&
-    /^(?!XRP$)([A-Za-z0-9]{3}|[A-F0-9]{40})$/.test(a.currency) &&
-    ![
-      "0000000000000000000000000000000000000000",
-      "0000000000000000000000005852500000000000",
-    ].includes(a.currency) &&
-    isValidClassicAddress(a.issuer)
-  );
-}
-export function symbol(currency) {
-  if (currency.length === 3) return currency;
-  const text = Buffer.from(currency, "hex").toString("utf8").replace(/\0/g, "");
-  return /^[\w .-]{1,20}$/.test(text) ? text : currency.slice(0, 10);
-}
 export function assertNetwork(info) {
-  if (info.network_id !== 1)
+  if (info.network_id !== 0)
     throw new Error(
-      "Network mismatch: only XRPL Testnet (network ID 1) is allowed.",
+      "Network mismatch: only XRPL Mainnet (network ID 0) is allowed.",
     );
 }
 export async function rpc(method, params = {}) {
@@ -46,7 +20,7 @@ export async function rpc(method, params = {}) {
     body: JSON.stringify({ method, params: [{ ...params, api_version: 2 }] }),
     signal: AbortSignal.timeout(15000),
   });
-  if (!res.ok) throw new Error("Testnet RPC unavailable.");
+  if (!res.ok) throw new Error("Mainnet RPC unavailable.");
   const result = (await res.json()).result;
   if (result?.error) {
     const e = new Error(result.error_message || result.error);
@@ -54,7 +28,7 @@ export async function rpc(method, params = {}) {
     e.result = result;
     throw e;
   }
-  if (!result) throw new Error("Empty Testnet RPC response.");
+  if (!result) throw new Error("Empty Mainnet RPC response.");
   return result;
 }
 export async function ledger() {
@@ -75,7 +49,7 @@ export async function ledger() {
     Date.now() - at > 30000 ||
     at > Date.now() + 5000
   )
-    throw new Error("Validated Testnet ledger is stale.");
+    throw new Error("Validated Mainnet ledger is stale.");
   return {
     hash: v.hash,
     index: v.seq,
@@ -88,116 +62,114 @@ export async function ledger() {
 }
 export function issuerAllowed(a) {
   const flags = a.Flags >>> 0;
-  if (flags & 0x40000 || flags & 0x400000 || flags & 0x80000000)
-    throw new Error(
-      "Issuer requires authorization, permits clawback, or is globally frozen.",
-    );
+  if (flags & 0x40000 || flags & 0x400000)
+    throw new Error("Issuer requires authorization or is globally frozen.");
   if (a.TransferRate && a.TransferRate !== 1000000000)
     throw new Error("Issuer transfer fees are not supported.");
 }
-export function levels(offers, side, asset) {
+export function levels(offers, side) {
   return offers
     .flatMap((o) => {
+      const native = side === "ask" ? o.TakerGets : o.TakerPays,
+        token = side === "ask" ? o.TakerPays : o.TakerGets;
       if (
-        side === "ask"
-          ? typeof o.TakerGets !== "object" ||
-            o.TakerGets.currency !== asset.currency ||
-            o.TakerGets.issuer !== asset.issuer ||
-            typeof o.TakerPays !== "string"
-          : typeof o.TakerPays !== "object" ||
-            o.TakerPays.currency !== asset.currency ||
-            o.TakerPays.issuer !== asset.issuer ||
-            typeof o.TakerGets !== "string"
+        typeof native !== "string" ||
+        !token ||
+        token.currency !== RLUSD.currency ||
+        token.issuer !== RLUSD.issuer
       )
         return [];
       const gets = o.taker_gets_funded ?? o.TakerGets,
         pays = o.taker_pays_funded ?? o.TakerPays;
-      const quantity = D(side === "ask" ? gets.value : pays.value),
-        value = xrp(side === "ask" ? pays : gets);
-      if (
-        !quantity.isFinite() ||
-        !value.isFinite() ||
-        quantity.lte(0) ||
-        value.lte(0)
-      )
+      try {
+        const q = xrp(side === "ask" ? gets : pays),
+          v = D((side === "ask" ? pays : gets).value);
+        if (!q.isFinite() || !v.isFinite() || q.lte(0) || v.lte(0)) return [];
+        return [
+          {
+            price: v.div(q).toString(),
+            quantity: q.toString(),
+            value: v.toString(),
+          },
+        ];
+      } catch {
         return [];
-      return [
-        {
-          price: value.div(quantity).toString(),
-          quantity: quantity.toString(),
-          xrp: value.toString(),
-        },
-      ];
+      }
     })
     .sort((a, b) => D(a.price).cmp(b.price) * (side === "ask" ? 1 : -1));
 }
-export function checkBook(book, sellQuantity = null) {
-  const { asks, bids } = book;
-  if (!asks.length || !bids.length)
-    throw new Error(
-      "No eligible market available: one-sided or unfunded book.",
-    );
-  const ask = D(asks[0].price),
-    bid = D(bids[0].price);
-  if (bid.gt(ask)) throw new Error("Crossed order book.");
-  const spread = ask.minus(bid).div(ask.plus(bid).div(2));
-  if (spread.gt(LIMITS.spread)) throw new Error("Spread exceeds 1%.");
-  const askCap = ask.mul(1.005),
-    bidFloor = bid.mul(0.995);
-  const buyDepth = asks
-    .filter((l) => D(l.price).lte(askCap))
-    .reduce((n, l) => n.plus(l.xrp), D(0));
-  const sellDepth = bids
-    .filter((l) => D(l.price).gte(bidFloor))
-    .reduce((n, l) => n.plus(l.quantity), D(0));
-  const needed = sellQuantity ? D(sellQuantity) : D(1).div(ask);
-  if (buyDepth.lt(1) || sellDepth.lt(needed))
-    throw new Error("Insufficient funded liquidity within the price limit.");
+export function checkBook(m, cfg) {
+  if (!m.asks.length || !m.bids.length)
+    throw new Error("One-sided or unfunded XRP/RLUSD book.");
+  const ask = D(m.asks[0].price),
+    bid = D(m.bids[0].price);
+  if (bid.gte(ask)) throw new Error("Crossed or locked order book.");
+  const spread = ask.minus(bid).div(ask.plus(bid).div(2)).mul(100);
+  const movement = D(cfg.movement).div(100);
   return {
     bid: bid.toString(),
     ask: ask.toString(),
-    spread: spread.mul(100).toString(),
-    buyDepth: buyDepth.toString(),
-    sellDepth: sellDepth.toString(),
+    mid: ask.plus(bid).div(2).toString(),
+    spread: spread.toString(),
+    buyDepth: m.asks
+      .filter((x) => D(x.price).lte(ask.mul(D(1).plus(movement))))
+      .reduce((n, x) => n.plus(x.value), D(0))
+      .toString(),
+    sellDepth: m.bids
+      .filter((x) => D(x.price).gte(bid.mul(D(1).minus(movement))))
+      .reduce((n, x) => n.plus(x.quantity), D(0))
+      .toString(),
+    eligible: spread.lte(cfg.spread),
+    reason: spread.lte(cfg.spread)
+      ? "Validated funded XRP/RLUSD book."
+      : "Spread exceeds the configured limit.",
   };
 }
-export async function book(asset, header, sellQuantity) {
-  if (!assetValid(asset)) throw new Error("Invalid token currency or issuer.");
+export async function book(header, cfg, address) {
   const [issuer, ask, bid] = await Promise.all([
-    rpc("account_info", { account: asset.issuer, ledger_hash: header.hash }),
+    rpc("account_info", { account: RLUSD.issuer, ledger_hash: header.hash }),
     rpc("book_offers", {
-      taker_gets: asset,
+      taker_gets: { currency: "XRP" },
+      taker_pays: RLUSD,
+      ledger_hash: header.hash,
+      limit: 100,
+      ...(address ? { taker: address } : {}),
+    }),
+    rpc("book_offers", {
+      taker_gets: RLUSD,
       taker_pays: { currency: "XRP" },
       ledger_hash: header.hash,
       limit: 100,
-    }),
-    rpc("book_offers", {
-      taker_gets: { currency: "XRP" },
-      taker_pays: asset,
-      ledger_hash: header.hash,
-      limit: 100,
+      ...(address ? { taker: address } : {}),
     }),
   ]);
   issuerAllowed(issuer.account_data);
   for (const r of [ask, bid])
     if (r.ledger_hash !== header.hash || r.ledger_index !== header.index)
       throw new Error("Book ledger mismatch.");
-  const result = {
-    asset,
-    symbol: symbol(asset.currency),
-    asks: levels(ask.offers, "ask", asset),
-    bids: levels(bid.offers, "bid", asset),
+  const m = {
+    asks: levels(ask.offers, "ask"),
+    bids: levels(bid.offers, "bid"),
     ledger: header.index,
     at: header.at,
     source: RPC,
+    asset: RLUSD,
   };
-  return {
-    ...result,
-    ...checkBook(result, sellQuantity),
-    eligible: true,
-    reason:
-      "Funded two-sided Testnet book; issuer and execution limits passed.",
-  };
+  return { ...m, ...checkBook(m, cfg) };
+}
+export function trustLine(w) {
+  const line = w.lines.find(
+    (l) => l.currency === RLUSD.currency && l.account === RLUSD.issuer,
+  );
+  if (
+    line &&
+    (line.freeze ||
+      line.freeze_peer ||
+      line.deep_freeze ||
+      line.deep_freeze_peer)
+  )
+    throw new Error("RLUSD trust line is frozen.");
+  return line;
 }
 export async function wallet(address, header) {
   try {
@@ -207,6 +179,7 @@ export async function wallet(address, header) {
         account: address,
         ledger_hash: header.hash,
         limit: 400,
+        peer: RLUSD.issuer,
       }),
     ]);
     const reserve = D(header.reserve).plus(
@@ -221,7 +194,9 @@ export async function wallet(address, header) {
         0,
         xrp(a.account_data.Balance).minus(reserve),
       ).toString(),
+      reserveIncrement: header.increment,
       sequence: a.account_data.Sequence,
+      flags: a.account_data.Flags,
       lines: l.lines,
       ledger: header.index,
       at: header.at,
@@ -235,13 +210,13 @@ export async function wallet(address, header) {
         available: "0",
         lines: [],
         reason:
-          "Account not found on Testnet. A network reset may require re-funding the same address.",
+          "Fund this Mainnet address with XRP before creating its RLUSD trust line.",
       };
     throw e;
   }
 }
 export function balanceGuard(w, amount, fee, extraReserve = "0") {
-  if (!w.funded) throw new Error("Wallet requires Testnet faucet funding.");
+  if (!w.funded) throw new Error("Wallet requires Mainnet XRP funding.");
   if (D(fee).gt(LIMITS.feeDrops) || D(fee).lt(0))
     throw new Error("Transaction fee exceeds 0.01 XRP.");
   if (
@@ -275,9 +250,10 @@ export function actualResult(response, address, asset) {
     xrpChange: change,
     tradeXrp: D(change).plus(fee).toString(),
     tokenChange: token,
-    executionPrice: D(token).eq(0)
-      ? null
-      : D(change).plus(fee).div(token).abs().toString(),
+    executionPrice:
+      D(token).eq(0) || D(change).plus(fee).eq(0)
+        ? null
+        : D(token).div(D(change).plus(fee)).abs().toString(),
     ledger: response.ledger_index,
     at: tx.date ? (tx.date + 946684800) * 1000 : Date.now(),
   };

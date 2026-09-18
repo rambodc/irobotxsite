@@ -1,6 +1,6 @@
 // Run from repository root with Node 22. Secrets never leave process memory except
-// the authenticated Secret Manager API; no seed or faucet response is logged.
-import { ensureFunded } from "../../functions/testnet/provisioning.js";
+// the authenticated Secret Manager API; no seed is logged.
+
 import { execFileSync } from "node:child_process";
 import { Wallet } from "../../functions/node_modules/xrpl/dist/npm/index.js";
 const project = "irobotxsite",
@@ -30,7 +30,7 @@ async function request(url, method = "GET", body) {
   return data;
 }
 const secretBase = `https://secretmanager.googleapis.com/v1/projects/${project}/secrets`;
-const doc = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents/xrplTestnet/${owner}`;
+const doc = `https://firestore.googleapis.com/v1/projects/${project}/databases/(default)/documents/xrplMainnet/${owner}`;
 function encode(v) {
   if (v === null) return { nullValue: null };
   if (typeof v === "boolean") return { booleanValue: v };
@@ -112,46 +112,18 @@ async function provision(name, role) {
     );
   return { address: wallet.classicAddress, secretVersion: version };
 }
-async function rpc(method, params = {}) {
-  const res = await fetch("https://s.altnet.rippletest.net:51234/", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ method, params: [params] }),
-    signal: AbortSignal.timeout(20000),
-  });
-  return (await res.json()).result;
-}
-const info = await rpc("server_info");
-if (info.info?.network_id !== 1) throw new Error("Testnet network mismatch.");
-const trader = await provision("XRPL_TESTNET_TRADER_SEED", "trader");
+const trader = await provision("XRPL_MAINNET_TRADER_SEED", "trader");
 await patch({
-  network: "testnet",
-  networkId: 1,
+  network: "mainnet",
+  networkId: 0,
   trader,
-  provisioning: "creating receiver",
+  provisioning: "ready",
 });
-const receiver = await provision("XRPL_TESTNET_RECEIVER_SEED", "receiver");
-await patch({ receiver, provisioning: "funding" });
-for (const [role, w] of Object.entries({ trader, receiver })) {
-  const account = await ensureFunded(w.address, {
-    account: (address) =>
-      rpc("account_info", { account: address, ledger_index: "validated" }),
-    faucet: async (address) =>
-      (
-        await fetch("https://faucet.altnet.rippletest.net/accounts", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ destination: address }),
-          signal: AbortSignal.timeout(60000),
-        })
-      ).ok,
-    wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-  });
-  console.log(
-    `${role}: ${w.address}; validated balance ${Number(account.Balance) / 1e6} test XRP`,
-  );
-}
-await patch({ provisioning: "ready" });
 console.log(
-  "Provisioned Testnet accounts. Seeds are stored only in Secret Manager.",
+  JSON.stringify({
+    address: trader.address,
+    network: "mainnet",
+    provisioning: "ready",
+    funding: "Owner funding required. Automation remains off.",
+  }),
 );

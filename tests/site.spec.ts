@@ -11,8 +11,8 @@ for (const viewport of [
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     for (const [route, heading] of [
-      ["/", "We build the systems"],
-      ["/about", "We build the future across four industries."],
+      ["/", "Technology for the industries of tomorrow."],
+      ["/about", "Helping organizations adopt the technologies shaping four industries."],
       ["/contact", "Tell us what you want to build."],
     ]) {
       await page.goto(route);
@@ -63,7 +63,7 @@ test("mobile navigation, sign in and private-route guard", async ({ page }) => {
   await page.getByRole("link", { name: "Forgot password?" }).click();
   await expect(page.locator("h1")).toHaveText("A fresh start.");
 });
-test("header has no sign-in link; contact page links to client sign-in", async ({
+test("header has no sign-in or project button; contact page links to client sign-in", async ({
   page,
 }) => {
   for (const width of [1440, 390]) {
@@ -71,11 +71,13 @@ test("header has no sign-in link; contact page links to client sign-in", async (
     await page.goto("/");
     await expect(page.getByRole("link", { name: /sign.?in/i })).toHaveCount(0);
     await expect(page.getByRole("link", { name: /demo/i })).toHaveCount(0);
+    await expect(page.getByRole("banner").getByRole("link", { name: /start a project/i })).toHaveCount(0);
     if (width === 390) {
       await page.getByRole("button", { name: "Open navigation" }).click();
       const menu = page.getByRole("navigation", { name: "Mobile navigation" });
       await expect(menu.getByRole("link")).toHaveText(["Home", "About", "Contact"]);
       await expect(menu.getByRole("link", { name: /sign.?in/i })).toHaveCount(0);
+      await page.getByRole("button", { name: "Close navigation" }).click();
     }
   }
   await page.goto("/contact");
@@ -93,7 +95,7 @@ test("the demo page is gone", async ({ page, request }) => {
   expect(sitemap).toContain("/contact");
 });
 for (const [route, title, h1] of [
-  ["/about", "About iRobotX", "We build the future across four industries."],
+  ["/about", "About iRobotX", "Helping organizations adopt the technologies shaping four industries."],
   ["/contact", "Contact iRobotX", "Tell us what you want to build."],
 ]) {
   test(`${route} has unique SEO metadata`, async ({ page }) => {
@@ -177,7 +179,7 @@ test("home falls back to a static page with every industry when WebGL is unavail
       null) as typeof HTMLCanvasElement.prototype.getContext;
   });
   await page.goto("/");
-  await expect(page.locator("h1")).toContainText("We build the systems");
+  await expect(page.locator("h1")).toContainText("Technology for the industries of tomorrow.");
   await expect(page.locator("canvas")).toHaveCount(0);
   for (const name of ["Robotics", "FinTech", "Oil & Gas", "Entertainment"])
     await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();
@@ -195,7 +197,7 @@ test.describe("immersive home", () => {
       await page.setViewportSize(viewport);
       await page.goto("/");
       await expect(page.locator(".x-canvas canvas")).toHaveCount(1);
-      await expect(page.locator("h1")).toContainText("We build the systems");
+      await expect(page.locator("h1")).toContainText("Technology for the industries of tomorrow.");
       const stage = page.locator(".x-stage");
       for (const [index, name] of ["Robotics", "FinTech", "Oil & Gas", "Entertainment"].entries()) {
         await page.getByRole("button", { name, exact: true }).click();

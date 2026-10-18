@@ -30,87 +30,92 @@ export const portalApps = [
 ] as const;
 export const experience = {
   eyebrow: "iRobotX · One system, every industry",
-  headline: "We build the systems that run tomorrow’s industries.",
+  headline: "Technology for the industries of tomorrow.",
   intro:
-    "iRobotX brings advanced technology and management systems to the world’s largest operators, so they spend less, make fewer errors, and grow in directions they couldn’t before.",
+    "iRobotX can help large organizations adopt advanced technology and management systems, so they can lower costs, reduce errors and grow in new ways.",
   cta: "Start a project",
   secondary: "About iRobotX",
-  outcomes: ["Lower operating cost", "Fewer errors", "New growth"],
   chapters: [
     {
       id: "robotics",
       name: "Robotics",
-      line: "Automation that works the line, shift after shift.",
-      copy: "Industrial robots and automation cells coordinated by one control system, taking on precise, repetitive and high-risk work to cut labour costs and defects.",
+      line: "Robotics and AI, powering new industries.",
+      copy: "Robotics is set to grow exponentially. We can help your organization adopt it and put it to work.",
     },
     {
       id: "fintech",
       name: "FinTech",
-      line: "Every transaction, reconciled in real time.",
-      copy: "Ledger, payment and risk systems that close the books faster, remove manual errors and open new revenue lines.",
+      line: "The future of finance, on the ledger.",
+      copy: "Blockchain is reshaping payments and assets. iRobotX has extensive experience with the XRP Ledger and can help you build on it.",
     },
     {
       id: "oil-gas",
       name: "Oil & Gas",
-      line: "From the rig floor to the reservoir, one view.",
-      copy: "Drilling, production and field crews on one platform, cutting non-productive time and costly mistakes.",
+      line: "Productive, connected, in control.",
+      copy: "Technology that can help you raise productivity, manage staff and control operations from one place.",
     },
     {
       id: "entertainment",
       name: "Entertainment",
-      line: "Live experiences, run at stadium scale.",
-      copy: "Ticketing, crowd and show-control systems that keep every event on cue and turn each audience into new growth.",
+      line: "Shows, organized.",
+      copy: "Tools that can help teams organize and run live events more productively.",
     },
   ],
 };
-export const about = {
+type Industry = { id: string; name: string; headline: string; text: string; points?: readonly string[] };
+export const about: {
+  eyebrow: string;
+  headline: string;
+  intro: string;
+  industries: Industry[];
+  approach: { title: string; text: string; steps: { name: string; text: string }[] };
+  band: { title: string; text: string };
+} = {
   eyebrow: "About iRobotX",
-  headline: "We build the future across four industries.",
+  headline: "Helping organizations adopt the technologies shaping four industries.",
   intro:
-    "iRobotX is a technology company that brings advanced technology and management systems to large corporations. We design, build and run the platforms that streamline how big operations work, so our clients cut costs and errors and grow in new ways.",
-  promise: [
-    { value: "Lower cost", text: "Automate the repetitive and remove duplicated systems so every dollar does more." },
-    { value: "Fewer errors", text: "One source of truth and machine-checked workflows replace manual handoffs." },
-    { value: "New growth", text: "Data and automation open products, services and markets that were out of reach." },
-  ],
+    "iRobotX is a technology company based in Calgary. We can help large organizations bring advanced technology and management systems into robotics, FinTech, Oil & Gas and entertainment, to lower costs, reduce errors and grow in new ways.",
   industries: [
     {
       id: "robotics",
       name: "Robotics",
-      headline: "Industrial robots and automation, orchestrated.",
-      text: "We integrate robotic arms, automation cells and the software that coordinates them, from vision-guided picking to welding and inspection. One control layer schedules the work, tracks quality and reports to the business, so production runs faster with fewer defects and less risk to people.",
-      points: ["Robot cell integration and control software", "Quality tracking and predictive maintenance", "Safety-first automation of high-risk tasks"],
+      headline: "Robotics and AI are powering new industries.",
+      text: "Robots guided by AI are moving from research labs onto factory floors, into warehouses, job sites and hospitals, and their adoption is set to grow exponentially. We can help your organization find where robotics fits, choose and integrate the right systems, and connect them to the software and people that run your operation.",
+      points: ["Find where automation creates value", "Select, integrate and connect robotic systems", "Bring AI into planning, quality and safety"],
     },
     {
       id: "fintech",
       name: "FinTech",
-      headline: "Financial systems that reconcile themselves.",
-      text: "We build ledgers, payment flows, digital-asset and risk platforms that keep every transaction accounted for in real time. Automated reconciliation and controls close the books faster, remove manual errors and give finance teams room to launch new products.",
-      points: ["Real-time ledgers and reconciliation", "Payments and digital-asset infrastructure", "Risk, compliance and reporting automation"],
+      headline: "The future of finance is being rebuilt on blockchain.",
+      text: "Payments, settlement and digital assets are moving to open ledgers that run around the clock. iRobotX has extensive experience with the XRP Ledger, and we can help your organization design, build and integrate financial applications on it and on related blockchain infrastructure.",
+      points: ["Applications on the XRP Ledger", "Digital-asset and payment integration", "Automated reconciliation, risk and reporting"],
     },
     {
       id: "oil-gas",
       name: "Oil & Gas",
-      headline: "From the rig floor to the reservoir, one platform.",
-      text: "We connect wells, drilling, production, field crews and service partners in one operating platform with AI built around the way each company works. Teams see the same live picture, act sooner and avoid the costly mistakes that come from disconnected spreadsheets and systems.",
-      points: ["Connected well, drilling and production data", "Field workforce and service-partner coordination", "AI assistance for planning and reporting"],
+      headline: "Technology for productive, well-run operations.",
+      text: "We can help oil and gas companies bring field, drilling and production data into one connected platform, manage staff and service partners, and use AI to plan and report on the work. The aim is higher productivity, a clear view of operations and tighter control of every site.",
+      points: ["Connected well, drilling and production data", "Staff and service-partner management", "Operational control with AI-assisted planning"],
     },
     {
       id: "entertainment",
       name: "Entertainment",
-      headline: "Live experiences, run at stadium scale.",
-      text: "We build ticketing, crowd-flow and show-control systems for venues and live productions. One system keeps entry, staff, stage technology and audience data in sync, so every event runs on cue and each audience becomes a source of new growth.",
-      points: ["Ticketing and access control", "Crowd, staff and venue operations", "Show control and audience insight"],
+      headline: "Smoother shows, from planning to curtain.",
+      text: "We can help organizers plan and run live shows more productively, with tools that keep teams, schedules and venues in step.",
     },
   ],
   approach: {
-    title: "One system, every industry.",
-    text: "The same iRobotX core powers each platform we build: secure data foundations, automation and AI that fit your management processes rather than replacing them.",
+    title: "How we can work together.",
+    text: "Every organization is different, so we start from how yours runs today and shape the technology around your teams, data and existing tools.",
     steps: [
-      { name: "Map", text: "We study how your operation really runs and where cost and errors hide." },
-      { name: "Build", text: "We design and deliver the system around your teams, data and existing tools." },
-      { name: "Run", text: "We operate, monitor and improve it with you as the business grows." },
+      { name: "Map", text: "We look at how your operation works and where technology can help most." },
+      { name: "Build", text: "We design and deliver systems that fit your processes." },
+      { name: "Run", text: "We support, monitor and improve them as your needs grow." },
     ],
+  },
+  band: {
+    title: "Ready to explore what’s next?",
+    text: "Tell us about your organization and the challenges you want to solve.",
   },
 };
 export const contact = {
@@ -125,15 +130,15 @@ export const contact = {
   ],
 };
 const description = {
-  home: "iRobotX builds advanced technology and management systems for large enterprises in robotics, FinTech, Oil & Gas and entertainment, cutting costs and errors and unlocking new growth.",
+  home: "iRobotX helps large organizations adopt advanced technology and management systems in robotics and AI, FinTech and blockchain, Oil & Gas and entertainment.",
   about:
-    "iRobotX is a Calgary technology company building advanced technology and management systems for large corporations in robotics, FinTech, Oil & Gas and entertainment.",
+    "iRobotX is a Calgary technology company helping organizations adopt robotics and AI, blockchain finance on the XRP Ledger, connected Oil & Gas operations and entertainment technology.",
   contact:
     "Contact iRobotX to discuss a custom technology or management system for your robotics, FinTech, Oil & Gas or entertainment operation.",
 };
 export const metadata = {
   "/": {
-    title: "iRobotX | Systems for Robotics, FinTech, Oil & Gas and Entertainment",
+    title: "iRobotX | Technology for Robotics, FinTech, Oil & Gas and Entertainment",
     description: description.home,
   },
   "/about": {

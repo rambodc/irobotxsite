@@ -116,9 +116,6 @@ function Header({ path }: { path: string }) {
           </Link>
         ))}
       </nav>
-      <Link to="/contact" className="header-cta">
-        Start a project <ArrowUpRight size={16} />
-      </Link>
       <button
         className="menu-button"
         aria-expanded={open}

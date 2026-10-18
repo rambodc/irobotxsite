@@ -29,14 +29,6 @@ export default function AboutPage() {
             </a>
           </div>
         </div>
-        <ul className="s-promise">
-          {about.promise.map((p) => (
-            <li key={p.value}>
-              <strong>{p.value}</strong>
-              <span>{p.text}</span>
-            </li>
-          ))}
-        </ul>
       </section>
 
       {about.industries.map((ind, i) => (
@@ -63,11 +55,13 @@ export default function AboutPage() {
             <h2 id={`${ind.id}-title`}>{ind.name}</h2>
             <p className="s-line">{ind.headline}</p>
             <p>{ind.text}</p>
-            <ul>
-              {ind.points.map((pt) => (
-                <li key={pt}>{pt}</li>
-              ))}
-            </ul>
+            {ind.points && (
+              <ul>
+                {ind.points.map((pt) => (
+                  <li key={pt}>{pt}</li>
+                ))}
+              </ul>
+            )}
           </div>
         </section>
       ))}
@@ -87,8 +81,8 @@ export default function AboutPage() {
       </section>
 
       <section className="s-band" aria-labelledby="band-title">
-        <h2 id="band-title">Ready to build what’s next?</h2>
-        <p>Tell us about your operation. We’ll show you where a single system can save cost, remove errors and open growth.</p>
+        <h2 id="band-title">{about.band.title}</h2>
+        <p>{about.band.text}</p>
         <Link to="/contact" className="s-cta">
           Start a project <ArrowUpRight size={17} aria-hidden="true" />
         </Link>

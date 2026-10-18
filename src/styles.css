@@ -779,24 +779,15 @@ legend {
     transition-duration: 0.01ms !important;
   }
 }
-/* Keep the complete well trajectory visible in the cutaway concepts. */
-
-/* The public Demo action is available before its lazy-loaded page opens. */
-.header-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  background: #2675bd;
-  color: #fff;
-  border: 1px solid #82b9ed55;
-  padding: 11px 17px;
-  border-radius: 30px;
-  white-space: nowrap;
-  font-size: 12px;
-  min-height: 42px;
-}
-.header-cta:hover {
-  background: #3488d4;
+/* Keep the nav pill centred between the logo and an equal-width spacer. */
+@media (min-width: 801px) {
+  .site-header > a:first-child,
+  .site-header::after {
+    flex: 1;
+  }
+  .site-header::after {
+    content: "";
+  }
 }
 .site-header > .nav-pill a {
   padding: 12px 17px;
@@ -812,19 +803,11 @@ legend {
   }
 }
 @media (max-width: 800px) {
-  .header-cta {
-    margin-left: auto;
-  }
   .site-header {
     gap: 14px;
   }
 }
 @media (max-width: 500px) {
-  .header-cta {
-    padding: 9px 13px;
-    font-size: 11px;
-    gap: 5px;
-  }
   .site-header {
     gap: 12px;
   }

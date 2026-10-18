@@ -74,3 +74,11 @@ export function contactInput(data) {
     message,
   };
 }
+// Single-line, length-capped text for email subject lines.
+export function subjectPart(value, max = 60) {
+  const clean = String(value ?? "")
+    .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return clean.length > max ? `${clean.slice(0, max - 1).trimEnd()}…` : clean;
+}

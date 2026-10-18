@@ -67,22 +67,19 @@ if (existing.status === 404) {
   console.log("Existing administrator profile preserved.");
 else throw new Error(`Profile lookup failed: ${existing.status}`);
 if (process.argv.includes("--send-setup")) {
-  const nodemailer = require("nodemailer");
-  const settings = JSON.parse(
-    execFileSync(
-      "gcloud",
-      [
-        "secrets",
-        "versions",
-        "access",
-        "latest",
-        "--secret=SMTP_CONFIG",
-        "--project=irobotxsite",
-      ],
-      { encoding: "utf8" },
-    ),
-  );
-  if (!settings.enabled) throw new Error("Email is not configured.");
+  const apiKey = execFileSync(
+    "gcloud",
+    [
+      "secrets",
+      "versions",
+      "access",
+      "latest",
+      "--secret=RESEND_API_KEY",
+      "--project=irobotxsite",
+    ],
+    { encoding: "utf8" },
+  ).trim();
+  if (!apiKey) throw new Error("Email is not configured.");
   const generated = new URL(
     await auth.generatePasswordResetLink(email, {
       url: "https://irobotx.io/portal",
@@ -90,20 +87,19 @@ if (process.argv.includes("--send-setup")) {
   );
   const link = new URL("https://irobotx.io/accept-invite");
   link.search = generated.search;
-  const transport = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 465,
-    secure: true,
-    auth: {
-      user: settings.username || "info@irobotx.io",
-      pass: settings.password,
+  const sent = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
     },
+    body: JSON.stringify({
+      from: "iRobotX <info@irobotx.io>",
+      to: [email],
+      subject: "Your iRobotX administrator account is ready",
+      text: `Your iRobotX administrator workspace is ready. Set your password here:\n\n${link}\n\nYou can then invite users and manage app access at https://irobotx.io/portal/admin`,
+    }),
   });
-  await transport.sendMail({
-    from: "iRobotX <info@irobotx.io>",
-    to: email,
-    subject: "Your iRobotX administrator account is ready",
-    text: `Your iRobotX administrator workspace is ready. Set your password here:\n\n${link}\n\nYou can then invite users and manage app access at https://irobotx.io/portal/admin`,
-  });
+  if (!sent.ok) throw new Error(`Setup email failed: ${sent.status}`);
   console.log("Administrator setup email sent.");
 }

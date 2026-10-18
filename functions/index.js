@@ -3,7 +3,6 @@ import { getAuth } from "firebase-admin/auth";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
-import nodemailer from "nodemailer";
 import { createHash, randomBytes } from "node:crypto";
 import {
   email,
@@ -13,11 +12,12 @@ import {
   assertLastAdmin,
   publicProfile,
   contactInput,
+  subjectPart,
 } from "./policy.js";
 initializeApp();
 const db = getFirestore(),
   auth = getAuth();
-const smtpConfig = defineSecret("SMTP_CONFIG");
+const resendApiKey = defineSecret("RESEND_API_KEY");
 const base = {
   // Emulator integration tests remain isolated from Google's attestation service.
   enforceAppCheck: process.env.FUNCTIONS_EMULATOR !== "true",
@@ -34,7 +34,7 @@ const base = {
     /^http:\/\/(localhost|127\.0\.0\.1):\d+$/,
   ],
 };
-const mailBase = { ...base, secrets: [smtpConfig] };
+const mailBase = { ...base, secrets: [resendApiKey] };
 const hash = (v) => createHash("sha256").update(v).digest("hex");
 const now = () => FieldValue.serverTimestamp();
 function endpoint(options, fn) {
@@ -99,33 +99,40 @@ async function rate(request, scope, limit = 10, window = 3600000) {
     });
   });
 }
-async function sendMail({ to, subject, body, replyTo }) {
+// Transactional mail goes through Resend (https://resend.com); irobotx.io is a
+// verified sending domain, so any @irobotx.io sender is accepted.
+const SENDERS = {
+  website: "iRobotX Website <website@irobotx.io>",
+  account: "iRobotX <info@irobotx.io>",
+};
+async function sendMail({ from = SENDERS.account, to, subject, body, replyTo }) {
   if (process.env.FUNCTIONS_EMULATOR === "true") {
     if (process.env.TEST_MAIL_FAILURE === "true")
       throw new Error("test-delivery-failure");
     return;
   }
-  const settings = JSON.parse(smtpConfig.value());
-  if (!settings.enabled || !settings.password)
-    throw new Error("smtp-not-configured");
-  const transport = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 465,
-    secure: true,
-    auth: {
-      user: settings.username || "info@irobotx.io",
-      pass: settings.password,
+  const key = resendApiKey.value();
+  if (!key) throw new Error("mail-not-configured");
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
     },
-    connectionTimeout: 10000,
-    socketTimeout: 15000,
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject,
+      text: body,
+      ...(replyTo ? { reply_to: replyTo } : {}),
+    }),
+    signal: AbortSignal.timeout(15000),
   });
-  await transport.sendMail({
-    from: "iRobotX <info@irobotx.io>",
-    to,
-    subject,
-    text: body,
-    ...(replyTo ? { replyTo } : {}),
-  });
+  if (!response.ok) {
+    const error = new Error("mail-rejected");
+    error.code = `resend-${response.status}`;
+    throw error;
+  }
 }
 async function actionLink(address, invite = false) {
   const generated = await auth.generatePasswordResetLink(address, {
@@ -387,9 +394,10 @@ export const submitContact = endpoint(mailBase, async (request) => {
   if (acquired !== "send") return { delivery: acquired, id };
   try {
     await sendMail({
+      from: SENDERS.website,
       to: "info@irobotx.io",
       replyTo: input.email,
-      subject: `iRobotX enquiry: ${input.industry}`,
+      subject: `New enquiry: ${subjectPart(input.name)}, ${input.industry}`,
       body: `Name: ${input.name}\nEmail: ${input.email}\nCompany: ${input.company || "Not provided"}\nIndustry: ${input.industry}\n\n${input.message}`,
     });
     await ref.update({ delivery: "sent", sentAt: now() });

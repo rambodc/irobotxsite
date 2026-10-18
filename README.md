@@ -41,18 +41,24 @@ Callable Functions: `getProfile`, `updateProfile`, `listUsers`, `inviteUser`, `r
 
 Firestore collections: `users` (profiles/status/role/apps/invitation status), `auditEvents` (admin access changes), `contactSubmissions` (contact details, message and delivery state), `rateLimits` (expiring abuse counters). Firestore browser reads and writes are denied, including for administrators; Functions apply authorization using the Admin SDK. No uploads or Storage access is used. Functions run in `us-central1`, zero minimum and two maximum instances each. Existing Firestore location is retained.
 
-Contact delivery has explicit pending/sent/failed states and an idempotency key. Failed messages remain saved and may be retried with unchanged content. SMTP delivery cannot provide exactly-once guarantees if a process exits after sending but before recording success. Fixed sender/recipient prevent the form from becoming an arbitrary email relay. Honeypot, input limits and transactional per-IP limits reduce abuse. Password recovery returns the same response for known and unknown addresses.
+Contact delivery has explicit pending/sent/failed states and an idempotency key. Failed messages remain saved and may be retried with unchanged content. Email delivery cannot provide exactly-once guarantees if a process exits after sending but before recording success. Fixed sender/recipient prevent the form from becoming an arbitrary email relay. Honeypot, input limits and transactional per-IP limits reduce abuse. Password recovery returns the same response for known and unknown addresses.
 
 ## Email configuration
 
-Sender and contact recipient: `info@irobotx.io`, an alias of `rambodc@irobotx.io`. Authenticate Gmail SMTP with the actual mailbox account and configure its authorized send-as alias in Google Workspace if required.
+Email is sent through [Resend](https://resend.com) using its REST API (no SDK dependency). `irobotx.io` is a verified Resend domain (DKIM/SPF records on the `resend._domainkey` and `send` subdomains, added via GoDaddy Domain Connect), so any `@irobotx.io` sender is accepted.
+
+- Contact form: from `iRobotX Website <website@irobotx.io>` to `info@irobotx.io` (an alias of `rambodc@irobotx.io`), Reply-To set to the visitor, subject `New enquiry: <name>, <industry>` so each enquiry arrives as a new Inbox conversation.
+- Invitations, password resets and the admin setup email: from `iRobotX <info@irobotx.io>`, so replies go to `info@`.
+
+The sending-only Resend API key is stored in the `RESEND_API_KEY` Firebase secret (Secret Manager) and bound to the mail functions with `defineSecret`. To rotate it, create a new key in Resend, then:
 
 ```sh
-python3 scripts/configure-email.py --username rambodc@irobotx.io
-# On macOS, use --dialog for a native hidden-input prompt.
+printf '%s' "$NEW_KEY" | firebase functions:secrets:set RESEND_API_KEY --data-file=- --project irobotxsite
 ```
 
-The script checks SMTP login and writes the app password directly to the `SMTP_CONFIG` Secret Manager secret. It does not write plaintext credentials to disk or print them. After rotating it, redeploy Functions to bind the new secret version. Send the initial admin setup link with `node scripts/bootstrap-admin.mjs --send-setup`. Never commit credentials. The Firebase web configuration is public client configuration; database rules and server authorization protect user data.
+and redeploy Functions to bind the new version. Delivery logs are in the Resend dashboard. Send the initial admin setup link with `node scripts/bootstrap-admin.mjs --send-setup`. Never commit credentials. The Firebase web configuration is public client configuration; database rules and server authorization protect user data.
+
+The former Gmail SMTP path was removed. The legacy `SMTP_CONFIG` secret is no longer referenced and can be destroyed once the Resend path has been verified in production.
 
 ## Deployment
 

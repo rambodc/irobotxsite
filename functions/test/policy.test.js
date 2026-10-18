@@ -6,6 +6,7 @@ import {
   assertAccess,
   assertLastAdmin,
   contactInput,
+  subjectPart,
 } from "../policy.js";
 test("access requires an invited or active profile and admin privileges cannot be supplied by client", () => {
   assert.throws(() => assertAccess(undefined));
@@ -44,4 +45,12 @@ test("contact validation rejects malformed, oversized and unknown inputs", () =>
   assert.throws(() => contactInput({ ...input, message: "x".repeat(5001) }));
   assert.throws(() => contactInput({ ...input, industry: "Anything" }));
   assert.throws(() => contactInput({ ...input, requestId: "bad" }));
+});
+test("email subject parts are single-line and length-capped", () => {
+  assert.equal(subjectPart("  Kirk\r\nBcc: x@y.z\t Smith "), "Kirk Bcc: x@y.z Smith");
+  assert.equal(subjectPart("a\u2028b"), "a b");
+  const long = subjectPart("x".repeat(200));
+  assert.equal(long.length, 60);
+  assert.ok(long.endsWith("…"));
+  assert.equal(subjectPart(undefined), "");
 });

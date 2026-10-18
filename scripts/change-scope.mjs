@@ -58,10 +58,7 @@ export function functionTargets(files, indexCoreUnchanged = false) {
       ).forEach((n) => selected.add(n));
     else if (f.startsWith("functions/mainnet/"))
       MAINNET_FUNCTIONS.forEach((n) => selected.add(n));
-    else if (f === "functions/demo-config.js") {
-      selected.add("demoChat");
-      selected.add("mainnetAnalyst");
-    } else if (f === "functions/demo-ai.js") selected.add("demoChat");
+    else if (f === "functions/demo-config.js") selected.add("mainnetAnalyst");
     else if (f === "functions/index.js" && indexCoreUnchanged)
       MAINNET_FUNCTIONS.forEach((n) => selected.add(n));
     else return "functions";
@@ -123,7 +120,8 @@ if (
   }
   let coreUnchanged = false;
   try {
-    const core = (s) => s.split("export { demoChat }")[0];
+    // Shared handlers sit above the Mainnet exports at the end of index.js.
+    const core = (s) => s.split("import { createMainnetHandlers }")[0];
     coreUnchanged =
       core(git("show", `${bases.functions}:functions/index.js`)) ===
       core(git("show", `${HEAD_SHA}:functions/index.js`));

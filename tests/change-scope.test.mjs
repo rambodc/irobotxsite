@@ -72,7 +72,6 @@ test("Mainnet-only changes target only Mainnet exports", () => {
       .map((n) => "functions:" + n)
       .join(","),
   );
-  assert.equal(functionTargets(["functions/demo-ai.js"]), "functions:demoChat");
   assert.equal(functionTargets(["functions/policy.js"]), "functions");
 });
 
@@ -87,6 +86,6 @@ test("worker and analyst edits deploy their own worker; shared model reaches bot
   );
   assert.equal(
     functionTargets(["functions/demo-config.js"]),
-    "functions:demoChat,functions:mainnetAnalyst",
+    "functions:mainnetAnalyst",
   );
 });

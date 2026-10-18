@@ -1,11 +1,11 @@
 /* eslint-disable react/no-unknown-property,react-hooks/immutability,react-hooks/purity */
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
+import { useEffect, useMemo, useRef, type RefObject } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { PerformanceMonitor } from "@react-three/drei";
 import {
   AdditiveBlending,
   BufferAttribute,
   BufferGeometry,
+  Matrix4,
   PerspectiveCamera,
   ShaderMaterial,
   Sphere,
@@ -13,13 +13,14 @@ import {
 } from "three";
 import { buildForms } from "./forms";
 import { fragmentShader, vertexShader } from "./shaders";
+import { armTarget, ARM_CYCLE, solveArm } from "./arm";
 import type { Director } from "./director";
 
 type Pose = { c: [number, number, number]; h: number; w: number; az: [number, number]; el: number };
 // Camera framing per form: centre, visible half-height/half-width, azimuth sweep, elevation.
 const POSES: Pose[] = [
   { c: [0, 0, 0], h: 4.3, w: 4.3, az: [-0.4, 0.4], el: 0.16 },
-  { c: [0, 0.15, 0], h: 4.3, w: 2.4, az: [-0.55, 0.35], el: 0.07 },
+  { c: [1.0, -0.7, 0.2], h: 3.1, w: 4.2, az: [-0.3, 0.3], el: 0.24 },
   { c: [0.5, 0.6, -0.3], h: 3.3, w: 6.1, az: [0.6, -0.1], el: 0.42 },
   { c: [0.5, 0.15, 0], h: 5.3, w: 5.5, az: [-0.6, 0.12], el: 0.15 },
   { c: [0, 0.6, 0], h: 3.8, w: 6.0, az: [0.5, -0.3], el: 0.3 },
@@ -73,6 +74,13 @@ function Field({ director, count, pointSize, stage }: SceneProps) {
           uIntensity: { value: 0 },
           uFrom: { value: 0 },
           uTo: { value: 0 },
+          uSeg: { value: Array.from({ length: 5 }, () => new Matrix4()) },
+          uTip: { value: new Vector3() },
+          uWeld: { value: 0 },
+          uPointer: { value: [0, 0] },
+          uRepel: { value: 0 },
+          uAspect: { value: 1 },
+          uPulse: { value: 0 },
         },
       }),
     [pointSize],
@@ -84,25 +92,19 @@ function Field({ director, count, pointSize, stage }: SceneProps) {
     },
     [geometry, material],
   );
-  const rig = useRef({ init: false, cx: 0, cy: 0, cz: 0, dist: 30, az: 0, el: 0, px: 0, py: 0, time: 0 });
-  const pointer = useRef({ x: 0, y: 0 });
+  const rig = useRef({
+    init: false, cx: 0, cy: 0, cz: 0, dist: 30, az: 0, el: 0, px: 0, py: 0, time: 0,
+    arm: 0, boost: 0, weld: 0, kicks: 0, pulse: 0, repel: 0, frames: 0, acc: 0,
+  });
+  const tilt = useRef({ x: 0, y: 0 });
   useEffect(() => {
-    const move = (e: PointerEvent) => {
-      if (e.pointerType !== "mouse") return;
-      pointer.current.x = (e.clientX / innerWidth) * 2 - 1;
-      pointer.current.y = (e.clientY / innerHeight) * 2 - 1;
-    };
-    const tilt = (e: DeviceOrientationEvent) => {
+    const onTilt = (e: DeviceOrientationEvent) => {
       if (e.gamma == null || e.beta == null) return;
-      pointer.current.x = Math.max(-1, Math.min(1, e.gamma / 30));
-      pointer.current.y = Math.max(-1, Math.min(1, (e.beta - 50) / 30));
+      tilt.current.x = Math.max(-1, Math.min(1, e.gamma / 30));
+      tilt.current.y = Math.max(-1, Math.min(1, (e.beta - 50) / 30));
     };
-    addEventListener("pointermove", move);
-    addEventListener("deviceorientation", tilt);
-    return () => {
-      removeEventListener("pointermove", move);
-      removeEventListener("deviceorientation", tilt);
-    };
+    addEventListener("deviceorientation", onTilt);
+    return () => removeEventListener("deviceorientation", onTilt);
   }, []);
   const { camera, size } = useThree();
   const portrait = size.width / size.height < 0.85;
@@ -127,6 +129,44 @@ function Field({ director, count, pointSize, stage }: SceneProps) {
     u.uProgress.value = director.progress;
     u.uIntensity.value = Math.min(1, s.time / 1.6);
     u.uPixelRatio.value = state.gl.getPixelRatio();
+    u.uAspect.value = size.width / size.height;
+
+    // Clicks: speed up / restart the arm on the Robotics chapter, otherwise a particle pulse.
+    if (director.kicks !== s.kicks) {
+      s.kicks = director.kicks;
+      if (director.chapter === 1) {
+        const t = s.arm - 1;
+        if (t < 0 || t % ARM_CYCLE > 6.9)
+          s.arm = 1 + Math.ceil(Math.max(t, 0) / ARM_CYCLE) * ARM_CYCLE;
+        s.boost = 1.4;
+      } else s.pulse = 1;
+    }
+    s.boost *= Math.exp(-dt * 0.8);
+    s.pulse *= Math.exp(-dt * 2.4);
+    u.uPulse.value = Math.sin(Math.min(1, s.pulse) * Math.PI) * 0.6;
+
+    // Arm kinematics.
+    s.arm = director.chapter === 1 ? s.arm + dt * (1 + s.boost) : 0;
+    const armT = s.arm - 1;
+    const target = armTarget(armT < 0 ? ARM_CYCLE : armT % ARM_CYCLE, s.time);
+    solveArm(target.tip, target.roll, u.uSeg.value, u.uTip.value);
+    s.weld += ((director.chapter === 1 ? target.weld : 0) - s.weld) * Math.min(1, dt * 12);
+    u.uWeld.value = s.weld;
+
+    // Cursor / finger repel.
+    const pt = director.pointer;
+    const live = pt.active && performance.now() / 1000 - pt.movedAt < 1.6 ? 1 : 0;
+    s.repel += (live - s.repel) * (1 - Math.exp(-dt * 4));
+    u.uRepel.value = s.repel;
+    u.uPointer.value = [pt.x, pt.y];
+
+    // Orbit offsets ease back to the tour path ~2 s after release.
+    const ob = director.orbit;
+    if (!ob.dragging && performance.now() / 1000 - ob.releasedAt > 1.8) {
+      const back = 1 - Math.exp(-dt * 1.4);
+      ob.az -= ob.az * back;
+      ob.el -= ob.el * back;
+    }
 
     const aspect = size.width / size.height;
     const hf = portrait ? 0.62 : 1,
@@ -143,45 +183,58 @@ function Field({ director, count, pointSize, stage }: SceneProps) {
     const m = smooth(Math.min(1, Math.max(0, director.progress)));
     const burst = director.from === director.to ? 0 : Math.sin(Math.PI * m);
     const k = 1 - Math.exp(-dt * 1.5);
-    s.px += (pointer.current.x - s.px) * (1 - Math.exp(-dt * 3));
-    s.py += (pointer.current.y - s.py) * (1 - Math.exp(-dt * 3));
-    const target = {
+    const px = pt.active && !portrait ? pt.x : tilt.current.x,
+      py = pt.active && !portrait ? -pt.y : tilt.current.y;
+    s.px += (px - s.px) * (1 - Math.exp(-dt * 3));
+    s.py += (py - s.py) * (1 - Math.exp(-dt * 3));
+    const goal = {
       cx: a.c[0] + (b.c[0] - a.c[0]) * m,
       cy: a.c[1] + (b.c[1] - a.c[1]) * m,
       cz: a.c[2] + (b.c[2] - a.c[2]) * m,
       dist: (a.dist + (b.dist - a.dist) * m) * (1 + 0.14 * burst),
-      az: a.az + (b.az - a.az) * m + s.px * 0.12,
-      el: a.el + (b.el - a.el) * m + s.py * 0.06,
+      az: a.az + (b.az - a.az) * m + s.px * 0.08,
+      el: a.el + (b.el - a.el) * m + s.py * 0.04,
     };
     if (!s.init) {
-      Object.assign(s, target, { init: true, dist: target.dist * 1.9, el: target.el + 0.25 });
+      Object.assign(s, goal, { init: true, dist: goal.dist * 1.9, el: goal.el + 0.25 });
     } else
       for (const key of ["cx", "cy", "cz", "dist", "az", "el"] as const)
-        s[key] += (target[key] - s[key]) * k;
+        s[key] += (goal[key] - s[key]) * k;
+    // Orbit sits on top of the damped path so dragging feels direct.
+    const az = s.az + ob.az,
+      el = Math.max(-0.05, Math.min(1.1, s.el + ob.el));
     const cam = state.camera;
     cam.position.set(
-      s.cx + s.dist * Math.cos(s.el) * Math.sin(s.az),
-      s.cy + s.dist * Math.sin(s.el),
-      s.cz + s.dist * Math.cos(s.el) * Math.cos(s.az),
+      s.cx + s.dist * Math.cos(el) * Math.sin(az),
+      s.cy + s.dist * Math.sin(el),
+      s.cz + s.dist * Math.cos(el) * Math.cos(az),
     );
     cam.lookAt(s.cx, s.cy, s.cz);
     u.uRef.value = s.dist * 0.85;
 
-    const el = stage.current;
-    if (el) {
-      el.style.setProperty("--x-progress", director.fraction.toFixed(4));
+    // Drop to 1x pixel ratio if frames run slow for two seconds.
+    s.acc += delta;
+    s.frames++;
+    if (s.acc > 2) {
+      if (s.frames / s.acc < 45 && state.gl.getPixelRatio() > 1) state.setDpr(1);
+      s.acc = 0;
+      s.frames = 0;
+    }
+
+    const node = stage.current;
+    if (node) {
+      node.style.setProperty("--x-progress", director.fraction.toFixed(4));
       const phase = director.settled ? "hold" : "morph";
-      if (el.dataset.phase !== phase) el.dataset.phase = phase;
+      if (node.dataset.phase !== phase) node.dataset.phase = phase;
     }
   });
   return <points geometry={geometry} material={material} frustumCulled={false} />;
 }
 
-function Dust() {
+export function Dust({ count = 1400 }: { count?: number }) {
   const geometry = useMemo(() => {
-    const n = 1400,
-      pos = new Float32Array(n * 3);
-    for (let i = 0; i < n; i++) {
+    const pos = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
       const u = Math.random() * 2 - 1,
         t = Math.random() * Math.PI * 2,
         r = 14 + Math.random() * 26,
@@ -191,7 +244,7 @@ function Dust() {
     const g = new BufferGeometry();
     g.setAttribute("position", new BufferAttribute(pos, 3));
     return g;
-  }, []);
+  }, [count]);
   const ref = useRef<{ rotation: { y: number } }>(null);
   useFrame((_, dt) => {
     if (ref.current) ref.current.rotation.y += dt * 0.01;
@@ -212,18 +265,15 @@ function Dust() {
 
 export default function Scene(props: SceneProps & { maxDpr: number }) {
   const { maxDpr, ...rest } = props;
-  const [dpr, setDpr] = useState(Math.min(maxDpr, window.devicePixelRatio || 1));
   return (
     <Canvas
-      dpr={dpr}
+      dpr={Math.min(maxDpr, window.devicePixelRatio || 1)}
       gl={{ antialias: false, alpha: true, powerPreference: "high-performance" }}
       camera={{ fov: FOV, near: 0.1, far: 200, position: [0, 0, 30] }}
       aria-hidden="true"
     >
-      <PerformanceMonitor flipflops={2} onDecline={() => setDpr(1)}>
-        <Dust />
-        <Field {...rest} />
-      </PerformanceMonitor>
+      <Dust />
+      <Field {...rest} />
     </Canvas>
   );
 }

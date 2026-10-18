@@ -19,11 +19,9 @@
     "test:trading:integration": "firebase emulators:exec --project demo-irobotx --only auth,firestore,functions \"node --test tests/trading.integration.mjs\""
   },
   "dependencies": {
-    "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.7.0",
     "firebase": "^12.18.0",
     "lucide-react": "^1.33.0",
-    "motion": "^12.23.24",
     "react": "19.2.6",
     "react-dom": "19.2.6",
     "three": "^0.185.1"

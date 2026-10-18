@@ -32,8 +32,17 @@
         "destination": "/about#fintech",
         "type": 301
       },
-      { "source": "/music-technology", "destination": "/about", "type": 301 },
-      { "source": "/live-experiences", "destination": "/about", "type": 301 }
+      {
+        "source": "/music-technology",
+        "destination": "/about#entertainment",
+        "type": 301
+      },
+      {
+        "source": "/live-experiences",
+        "destination": "/about#entertainment",
+        "type": 301
+      },
+      { "source": "/demo", "destination": "/", "type": 301 }
     ],
     "rewrites": [{ "source": "**", "destination": "/index.html" }],
     "headers": [

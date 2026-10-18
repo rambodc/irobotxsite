@@ -23,9 +23,9 @@ Set `VITE_EMULATORS=true` in `.env.local` to use local Auth/Functions. Integrati
 
 ## Routes and content
 
-Public pages: `/`, `/about`, `/demo`, `/contact`. Authentication: `/signin`, `/forgot-password`, `/accept-invite`, `/auth/action`. Private workspace: `/portal`, `/portal/account`, `/portal/contact`, `/portal/admin`.
+Public pages: `/`, `/about`, `/contact`. Authentication: `/signin`, `/forgot-password`, `/accept-invite`, `/auth/action`. Private workspace: `/portal`, `/portal/account`, `/portal/contact`, `/portal/admin`.
 
-Edit public-page copy, industries, concept definitions, image descriptions and page metadata in `src/content.ts`. Layout is in `src/App.tsx`; blue theme tokens and responsive rules are in `src/styles.css`. The site uses static cinematic images and reduced-motion-aware reveals; Three.js loads only when the demo Well Viewer opens, with a static fallback when WebGL is unavailable. The demo combines fictional employee/well data with real AI Chat; it includes no engineering calculations or live operational integrations. Public route metadata is emitted by `scripts/page-metadata.mjs`; update it when changing page positioning.
+Edit public-page copy, industries, chapter text and page metadata in `src/content.ts`. Routing, header/footer and the shared contact form are in `src/App.tsx`; the About and Contact pages live in `src/site/` (`AboutPage.tsx`, `ContactPage.tsx`, `site.css`) with a lazily loaded particle accent (`Accent.tsx`, `AccentStage.tsx`) that supports limited drag-to-orbit and falls back to a static glow without WebGL or with reduced motion. The home page is an immersive React Three Fiber particle tour in `src/home3d/` (`forms.ts` shapes, `arm.ts` robotic-arm kinematics, `shaders.ts`, `director.ts` chapter timing, `Scene.tsx`, `HomeExperience.tsx`). Visitors can drag to orbit (clamped and damped; on touch, horizontal drag orbits and vertical swipe changes chapter), particles react to the pointer, a click fires a pulse or speeds up the arm, and chapter markers preview their chapter on hover. Reduced motion or missing WebGL shows a static page with every industry. Sign-in is reached from the "Client sign-in" link at the bottom of Contact; it is not in the header. Public route metadata, Organization/WebPage JSON-LD and social tags are emitted by `scripts/page-metadata.mjs`; update it when changing page positioning.
 
 ## Accounts and application access
 
@@ -88,39 +88,15 @@ If legitimate traffic is blocked, first inspect App Check metrics and the allowe
 
 ## Imagery and iX branding
 
-Six cinematic images were generated with the built-in image generation tool. Original artwork and the exact prompt set are in `assets/artwork/` and `assets/artwork/prompts.json`. Imagery is conceptual and does not depict a delivered customer system. `public/images/` contains responsive 640/1024/1536px AVIF and WebP exports. Run `npm run assets` after changing original artwork or the brand source. Image processing uses Sharp; generated output is committed and is not regenerated during deployment.
+`public/images/` holds stills rendered from the 3D scene: `home-still-{768,1536}.webp` (home fallback) and `industry-{robotics,fintech,oil-gas,entertainment}-{480,960}.webp` (About page and chapter previews). They are captured from the running site with Playwright. `npm run assets` regenerates the brand exports and composes the social card `public/og.png` from `home-still-1536.webp`. Image processing uses Sharp; generated output is committed and is not regenerated during deployment.
 
 `public/brand/` includes transparent blue, white and monochrome iX marks, horizontal lockups, square/circular versions, and PNG exports. `scripts/brand-assets.mjs` defines the shared SVG geometry. The same mark appears in the public footer, authentication, the portal, the favicon and social card. Treat background marks as decorative; retain meaningful alternative text for the cinematic images.
 
-Home prioritizes custom Oil & Gas platforms and tailored AI integration. About preserves Oil & Gas, Robotics and FinTech anchors. Demo opens a full-screen fictional employee workspace with Profile, Company, Employees, AI Chat, and Well Viewer. The private portal uses a mini-app launcher; existing industry application assignment IDs are preserved.
+Home is a five-chapter tour: iRobotX Core, Robotics (a particle industrial arm that reaches, welds and returns), FinTech, Oil & Gas and Entertainment. About covers the four industries with anchors `#robotics`, `#fintech`, `#oil-gas` and `#entertainment`. The private portal uses a mini-app launcher; existing industry application assignment IDs are preserved.
 
-## Interactive demo
+## Retired demo backend
 
-`src/DemoWorkspace.tsx` is lazy-loaded at `/demo`, outside the public header/footer. The home screen has Profile, Company, Employees, AI Chat, and Well Viewer. App definitions, employee/company records, and action permissions live in `src/demoContent.ts`; styling is isolated in `src/demo.css`. Retired gallery fragments return to the launcher.
-
-The default employee is John Miller at fictional PulseCrest Energy Inc. Profile edits update the same employee record shown in the directory. Company details, employee creation/editing, granular access, and portraits are held only in React memory. Refresh or Reset workspace restores the initial data. Employee/company actions never call authentication, email, or database APIs. AI Chat calls its dedicated backend endpoint; conversations remain temporary. The real portal remains at `/signin`.
-
-View permissions control app visibility; action permissions independently control editing, employee creation, and access management. Disabling View clears dependent actions. New employees get their own editable Profile and read-only Company by default. John retains all permissions and active status. View as employee applies that employee's permissions, with a separate Return to John control. Email uniqueness is case-insensitive. Photo uploads accept decodable JPEG/PNG/WebP images up to 5 MB; Cancel discards them and Save updates only memory.
-
-Company uses a downtown Calgary OpenStreetMap embed with attribution and a permanent external map link. The marker is an illustrative location, not an actual PulseCrest office. Contact addresses use the reserved `.example` domain and phone numbers are fictional.
-
-John's fictional portrait was generated with the built-in image generation tool. The source is `assets/artwork/john-miller.png`, the compressed asset is `public/images/people/john-miller.webp`, and the exact prompt is `assets/artwork/john-miller-prompt.json`.
-
-
-### Demo AI and well viewer
-
-`src/DemoAIApps.tsx` and `src/demoAI.ts` provide the chat streaming interface. State is scoped to the selected fictional employee in memory. Refresh/Reset clears it. View and Use permissions govern the UI; these fictional permissions are not a backend identity.
-
-`functions/demo-ai.js` exports `demoChat`. Every endpoint validates existing App Check tokens. UTC daily chat limits are 100 replies site-wide and 10 per IP, plus three requests per minute per IP. Limits are transactional, and failed AI calls still count. Only hashed-IP/global counters and expiration timestamps enter the server-only `rateLimits` collection. OpenAI requests use `store: false`; no transcripts are saved by this application. Counter documents carry a two-day `expiresAt` for the existing TTL policy.
-
-The `OPENAI_API_KEY` secret is entered through `python3 scripts/configure-openai.py` using a hidden local prompt and stored in Secret Manager. Never put it in frontend environment variables. The server-only default in `functions/demo-config.js` is `gpt-5.6-terra` (optionally overridden by the runtime `DEMO_AI_MODEL` environment variable). Change the config module and redeploy Functions without rebuilding Hosting. Set conservative billing alerts in the OpenAI project separately if desired.
-
-The Well Viewer is adapted from `rambodc/uniq` production commit `1030fce0f65aafbe4299cf167ec5109676b7861a`. Its fixed metric dataset is in `src/well-viewer/sample-well.ts`. A main bore and three laterals share exact junction stations. Survey, casing, and drilling values are illustrative. No package import, saved-well library, cloud storage, or geometry editor is included.
-
-Release AI backend changes through `production` with Functions first, then Hosting; unchanged Firestore rules are skipped automatically. For rollback, restore the prior production commit and redeploy the changed components. Removing AI UI alone can be released as Hosting only; disable the AI endpoints separately if retiring them.
-
-Launcher artwork is generated with the built-in image tool and served as five 300 × 300 WebP images in `public/images/apps/` (about 50 KB combined). Exact prompts are in `assets/artwork/app-icons-prompts.json`. Profile portraits remain inside employee/profile screens. The chat composer uses 16px text to prevent iPhone focus zoom while preserving user-controlled page zoom.
-
+The public `/demo` workspace (fictional employee apps, AI Chat and Well Viewer) has been removed from the frontend; `/demo` now 301-redirects to `/`. The backend function `demoChat` (`functions/demo-ai.js`, with `scripts/configure-openai.py`) is intentionally still in place because removing a deployed function from source makes the non-interactive Functions deploy abort. To retire it, an operator first runs `firebase functions:delete demoChat --project irobotxsite`, then removes `functions/demo-ai.js`, its export in `functions/index.js` and the demo references in `scripts/change-scope.mjs`. `functions/demo-config.js` is shared with `mainnetAnalyst` and must stay, and the `OPENAI_API_KEY` secret is also referenced by the Mainnet scripts.
 
 ## Authenticated Mainnet trading
 

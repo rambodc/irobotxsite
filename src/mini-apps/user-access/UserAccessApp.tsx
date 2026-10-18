@@ -1,7 +1,7 @@
 import { useState, useEffect, type FormEvent } from "react";
 import { Search, RefreshCw, ArrowUpRight } from "lucide-react";
 import { api, errorMessage, type Profile, type AppId } from "../../api";
-import { demos } from "../../content";
+import { portalApps } from "../../content";
 export default function Admin() {
   const [users, setUsers] = useState<Profile[]>([]);
   const [search, setSearch] = useState("");
@@ -192,7 +192,7 @@ export default function Admin() {
               These applications are coming soon. Assignments reserve future
               access.
             </p>
-            {demos.map((d) => (
+            {portalApps.map((d) => (
               <label className="checkbox" key={d.id}>
                 <input
                   type="checkbox"

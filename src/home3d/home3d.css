@@ -482,3 +482,67 @@ html.x-lock body {
   --x-blue: #4898ff;
   --x-ice: #b8dcff;
 }
+.x-canvas {
+  cursor: grab;
+}
+.x-stage[data-dragging="true"] .x-canvas,
+.x-canvas:active {
+  cursor: grabbing;
+}
+.x-hint {
+  margin-left: 6px;
+  opacity: 0.7;
+}
+.x-preview {
+  position: absolute;
+  z-index: 7;
+  right: calc(max(36px, 3.5vw) + 205px);
+  top: calc(50% - 170px + var(--i) * 46px);
+  width: 260px;
+  margin: 0;
+  padding: 10px;
+  border-radius: 16px;
+  border: 1px solid rgba(165, 211, 255, 0.18);
+  background: rgba(5, 11, 23, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  opacity: 0;
+  transform: translateX(10px) scale(0.98);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  pointer-events: none;
+}
+.x-preview.is-open {
+  opacity: 1;
+  transform: none;
+}
+.x-preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: 10px;
+}
+.x-preview figcaption {
+  display: grid;
+  gap: 4px;
+  padding: 10px 4px 2px;
+  font-size: 14px;
+  color: #fff;
+}
+.x-preview figcaption b {
+  color: var(--x-warm);
+  font: 600 11px/1 ui-monospace, Menlo, Consolas, monospace;
+  letter-spacing: 0.14em;
+}
+.x-preview figcaption span {
+  font-size: 12.5px;
+  line-height: 1.4;
+  color: #a9bbd0;
+}
+@media (max-width: 820px), (max-aspect-ratio: 17/20), (hover: none) {
+  .x-preview {
+    display: none;
+  }
+}

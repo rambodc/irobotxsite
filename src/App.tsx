@@ -1,33 +1,12 @@
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useState,
-  type FormEvent,
-  type ReactNode,
-} from "react";
-import { motion, useReducedMotion } from "motion/react";
-import {
-  ArrowUpRight,
-  Menu,
-  X,
-} from "lucide-react";
-import {
-  company,
-  industries,
-  images,
-  home,
-  about,
-  contact,
-  cta,
-  metadata,
-  type ImageId,
-} from "./content";
+import { lazy, Suspense, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { ArrowUpRight, Check, Menu, X } from "lucide-react";
+import { company, metadata } from "./content";
 import { api, errorMessage } from "./api";
 import HomeExperience from "./home3d/HomeExperience";
-const DemoWorkspace = lazy(() => import("./DemoWorkspace"));
+import AboutPage from "./site/AboutPage";
+import ContactPage from "./site/ContactPage";
 const Portal = lazy(() => import("./Portal"));
-const publicPaths = ["/", "/about", "/demo", "/contact"];
+const publicPaths = ["/", "/about", "/contact"];
 export function Link({
   to,
   children,
@@ -108,26 +87,6 @@ export function Button({
     </Link>
   );
 }
-function Reveal({
-  children,
-  className = "",
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  const reduce = useReducedMotion();
-  return (
-    <motion.div
-      className={className}
-      initial={reduce ? false : { opacity: 0, y: 24 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-30px" }}
-      transition={{ duration: 0.65 }}
-    >
-      {children}
-    </motion.div>
-  );
-}
 function Header({ path }: { path: string }) {
   const [open, setOpen] = useState(false);
   useEffect(() => {
@@ -145,8 +104,7 @@ function Header({ path }: { path: string }) {
       <nav className="nav-pill" aria-label="Main navigation">
         {[
           ["Home", "/"],
-          ["About us", "/about"],
-          ["Client sign in", "/signin"],
+          ["About", "/about"],
           ["Contact", "/contact"],
         ].map(([label, to]) => (
           <Link
@@ -158,12 +116,8 @@ function Header({ path }: { path: string }) {
           </Link>
         ))}
       </nav>
-      <Link
-        to="/demo"
-        className="header-demo"
-        aria-current={path === "/demo" ? "page" : undefined}
-      >
-        Demo <ArrowUpRight size={16} />
+      <Link to="/contact" className="header-cta">
+        Start a project <ArrowUpRight size={16} />
       </Link>
       <button
         className="menu-button"
@@ -182,10 +136,8 @@ function Header({ path }: { path: string }) {
         >
           {[
             ["Home", "/"],
-            ["About us", "/about"],
-            ["Demo", "/demo"],
+            ["About", "/about"],
             ["Contact", "/contact"],
-            ["Client sign in", "/signin"],
           ].map(([label, to]) => (
             <Link key={to} to={to}>
               {label}
@@ -206,16 +158,16 @@ function Footer() {
             <Logo />
           </Link>
           <p>
-            Engineering what comes next.
+            One system, every industry.
             <br />
-            Built in Calgary. Designed for the field.
+            Robotics · FinTech · Oil &amp; Gas · Entertainment
           </p>
         </div>
         <div>
           <span className="eyebrow">Explore</span>
-          <Link to="/about">About us</Link>
-          <Link to="/demo">Explore demos</Link>
-          <Link to="/signin">Client portal</Link>
+          <Link to="/">Home</Link>
+          <Link to="/about">About</Link>
+          <Link to="/contact">Contact</Link>
         </div>
         <div>
           <span className="eyebrow">Let’s connect</span>
@@ -223,9 +175,11 @@ function Footer() {
             {company.email}
             <ArrowUpRight size={14} />
           </a>
-          <span>Calgary, Alberta, Canada</span>
+          <span>
+            {company.location}, {company.country}
+          </span>
           <Link to="/contact">
-            Start a conversation <ArrowUpRight size={14} />
+            Start a project <ArrowUpRight size={14} />
           </Link>
         </div>
       </div>
@@ -238,130 +192,14 @@ function Footer() {
     </footer>
   );
 }
-function Art({
-  name,
-  priority = false,
-  className = "",
-}: {
-  name: ImageId;
-  priority?: boolean;
-  className?: string;
-}) {
-  const asset = images[name];
-  return (
-    <picture className={`cinematic-art art-${name} ${className}`}>
-      <source
-        type="image/avif"
-        srcSet={`/images/${asset.src}-640.avif 640w, /images/${asset.src}-1024.avif 1024w, /images/${asset.src}-1536.avif 1536w`}
-        sizes={priority ? "100vw" : "(max-width: 800px) 100vw, 60vw"}
-      />
-      <img
-        src={`/images/${asset.src}-1024.webp`}
-        srcSet={`/images/${asset.src}-640.webp 640w, /images/${asset.src}-1024.webp 1024w, /images/${asset.src}-1536.webp 1536w`}
-        sizes={priority ? "100vw" : "(max-width: 800px) 100vw, 60vw"}
-        alt={asset.alt}
-        width={1536}
-        height={1024}
-        loading={priority ? "eager" : "lazy"}
-        fetchPriority={priority ? "high" : "auto"}
-        decoding="async"
-      />
-    </picture>
-  );
-}
-function CTA() {
-  return (
-    <section className="cta-band">
-      <Mark className="brand-watermark" />
-      <Reveal>
-        <span className="eyebrow">{cta.eyebrow}</span>
-        <h2>{cta.title}</h2>
-        <p>{cta.text}</p>
-        <Button>{cta.button}</Button>
-      </Reveal>
-    </section>
-  );
-}
-function Process() {
-  return (
-    <section className="content-section process-section">
-      <Reveal className="section-heading">
-        <div>
-          <span className="eyebrow">{home.process.eyebrow}</span>
-          <h2>{home.process.title}</h2>
-        </div>
-        <p>{home.process.text}</p>
-      </Reveal>
-      <div className="process-cards">
-        {home.process.steps.map((step, i) => (
-          <Reveal className="process-card" key={step.title}>
-            <span className="step-number">0{i + 1}</span>
-            <h3>{step.title}</h3>
-            <p>{step.text}</p>
-          </Reveal>
-        ))}
-      </div>
-    </section>
-  );
-}
-function About() {
-  return (
-    <>
-      <section className="page-hero brand-page-hero">
-        <Mark className="page-watermark" />
-        <span className="eyebrow">{about.eyebrow}</span>
-        <h1>{about.title}</h1>
-        <p>{about.intro}</p>
-      </section>
-      <section className="content-section about-intro">
-        <Reveal>
-          <span className="eyebrow">{about.eyebrow2}</span>
-          <h2>{about.heading}</h2>
-        </Reveal>
-        <Reveal>
-          {about.paragraphs.map((p) => (
-            <p key={p}>{p}</p>
-          ))}
-        </Reveal>
-      </section>
-      {industries.map((industry) => (
-        <section
-          key={industry.id}
-          id={industry.id}
-          className={`content-section about-industry ${industry.id === "oil-gas" ? "about-primary" : ""}`}
-        >
-          <Reveal className="about-industry-art">
-            <Art name={industry.image} />
-            <span className="image-label">
-              {industry.name} / Illustrative concept
-            </span>
-          </Reveal>
-          <Reveal className="about-industry-copy">
-            <span className="eyebrow">
-              {industry.number} / {industry.name}
-            </span>
-            <h2>{industry.title}</h2>
-            <p>{industry.text}</p>
-            <p>{industry.detail}</p>
-            <div className="tags">
-              {industry.tags.map((tag) => (
-                <span key={tag}>{tag}</span>
-              ))}
-            </div>
-          </Reveal>
-        </section>
-      ))}
-      <Process />
-      <CTA />
-    </>
-  );
-}
-
 export function ContactForm({
   prefill,
+  variant = "portal",
 }: {
   prefill?: { name: string; email: string; company: string };
+  variant?: "portal" | "site";
 }) {
+  const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState("");
   const [failed, setFailed] = useState(false);
@@ -393,6 +231,7 @@ export function ContactForm({
       if (response.delivery === "sent") {
         form.reset();
         setRequestId(crypto.randomUUID());
+        setSent(true);
       }
     } catch (error) {
       setFailed(true);
@@ -401,9 +240,31 @@ export function ContactForm({
       setBusy(false);
     }
   }
+  if (sent && variant === "site")
+    return (
+      <div className="contact-form c-form c-sent" role="status">
+        <span className="c-sent-icon" aria-hidden="true">
+          <Check size={26} />
+        </span>
+        <h2>Message received.</h2>
+        <p>{result}</p>
+        <p>We reply within one business day from {company.email}.</p>
+        <button
+          type="button"
+          className="c-again"
+          onClick={() => {
+            setSent(false);
+            setResult("");
+          }}
+        >
+          Send another message
+        </button>
+      </div>
+    );
   return (
     <form
-      className="contact-form panel"
+      className={variant === "site" ? "contact-form c-form" : "contact-form panel"}
+      aria-busy={busy}
       onSubmit={submit}
       onChange={() => {
         if (failed) {
@@ -413,7 +274,11 @@ export function ContactForm({
         }
       }}
     >
-      <h3>Start a conversation.</h3>
+      {variant === "site" ? (
+        <h2>Start a project</h2>
+      ) : (
+        <h3>Start a conversation.</h3>
+      )}
       <div className="form-row">
         <label>
           Your name
@@ -481,7 +346,10 @@ export function ContactForm({
         We use these details to respond to your enquiry.
       </p>
       {result && (
-        <div role="status" className={`alert ${failed ? "error" : "success"}`}>
+        <div
+          role={failed ? "alert" : "status"}
+          className={`alert ${failed ? "error" : "success"}`}
+        >
           {result}
         </div>
       )}
@@ -490,39 +358,6 @@ export function ContactForm({
         <ArrowUpRight size={18} />
       </button>
     </form>
-  );
-}
-function Contact() {
-  return (
-    <>
-      <section className="page-hero brand-page-hero">
-        <Mark className="page-watermark" />
-        <span className="eyebrow">{contact.eyebrow}</span>
-        <h1>{contact.title}</h1>
-        <p>{contact.intro}</p>
-      </section>
-      <section className="section contact-layout">
-        <div>
-          <span className="eyebrow">A direct connection</span>
-          <h2>{contact.heading}</h2>
-          <p>{contact.text}</p>
-          <a className="email-link" href={`mailto:${company.email}`}>
-            {company.email}
-            <ArrowUpRight size={21} />
-          </a>
-          <p>{company.location}, Canada</p>
-          <div className="contact-brand">
-            <Mark />
-            <span>
-              Connected thinking.
-              <br />
-              Built around you.
-            </span>
-          </div>
-        </div>
-        <ContactForm />
-      </section>
-    </>
   );
 }
 export default function App() {
@@ -555,6 +390,11 @@ export default function App() {
         page?.description || "Your private iRobotX workspace.",
       ],
       ['meta[property="og:title"]', document.title],
+      ['meta[name="twitter:title"]', document.title],
+      [
+        'meta[name="twitter:description"]',
+        page?.description || "Your private iRobotX workspace.",
+      ],
       [
         'meta[property="og:description"]',
         page?.description || "Your private iRobotX workspace.",
@@ -597,14 +437,6 @@ export default function App() {
         />
       </Suspense>
     );
-  if (path === "/demo")
-    return (
-      <Suspense
-        fallback={<main className="route-loading">Opening workspace…</main>}
-      >
-        <DemoWorkspace />
-      </Suspense>
-    );
   if (path === "/")
     return (
       <div className="x-home">
@@ -625,9 +457,9 @@ export default function App() {
       <Header key={path} path={path} />
       <main id="main">
         {path === "/about" ? (
-          <About />
+          <AboutPage />
         ) : path === "/contact" ? (
-          <Contact />
+          <ContactPage />
         ) : (
           <section className="page-hero">
             <span className="eyebrow">404 / Page not found</span>

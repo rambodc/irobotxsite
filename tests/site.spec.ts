@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs";
 import { test, expect } from "@playwright/test";
 for (const viewport of [
   { width: 1440, height: 1000 },
@@ -11,9 +12,8 @@ for (const viewport of [
     page.on("pageerror", (e) => errors.push(e.message));
     for (const [route, heading] of [
       ["/", "We build the systems"],
-      ["/about", "Technology that understands"],
-      ["/demo", "Demo"],
-      ["/contact", "Your operation."],
+      ["/about", "We build the future across four industries."],
+      ["/contact", "Tell us what you want to build."],
     ]) {
       await page.goto(route);
       await expect(page.locator("h1")).toContainText(heading);
@@ -47,7 +47,7 @@ test("mobile navigation, sign in and private-route guard", async ({ page }) => {
   await page.getByRole("button", { name: "Open navigation" }).click();
   await page
     .getByRole("navigation", { name: "Mobile navigation" })
-    .getByRole("link", { name: "About us" })
+    .getByRole("link", { name: "About" })
     .click();
   await expect(page).toHaveURL(/\/about$/);
   await expect(
@@ -63,35 +63,63 @@ test("mobile navigation, sign in and private-route guard", async ({ page }) => {
   await page.getByRole("link", { name: "Forgot password?" }).click();
   await expect(page.locator("h1")).toHaveText("A fresh start.");
 });
-test("reduced motion and unavailable WebGL preserve content", async ({
+test("header has no sign-in link; contact page links to client sign-in", async ({
   page,
 }) => {
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.addInitScript(() => {
-    HTMLCanvasElement.prototype.getContext = (() =>
-      null) as typeof HTMLCanvasElement.prototype.getContext;
-  });
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    await expect(page.getByRole("link", { name: /sign.?in/i })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: /demo/i })).toHaveCount(0);
+    if (width === 390) {
+      await page.getByRole("button", { name: "Open navigation" }).click();
+      const menu = page.getByRole("navigation", { name: "Mobile navigation" });
+      await expect(menu.getByRole("link")).toHaveText(["Home", "About", "Contact"]);
+      await expect(menu.getByRole("link", { name: /sign.?in/i })).toHaveCount(0);
+    }
+  }
+  await page.goto("/contact");
+  await page.getByRole("link", { name: "Client sign-in" }).click();
+  await expect(page).toHaveURL(/\/signin$/);
+  await expect(page.getByRole("textbox", { name: "Email address" })).toBeVisible();
+});
+test("the demo page is gone", async ({ page, request }) => {
   await page.goto("/demo");
-  await expect(page.locator("h1")).toHaveText("Demo");
-  const launcher = page.getByRole("navigation", { name: "Employee apps" });
-  await expect(launcher).toBeVisible();
-  for (const app of ["Profile", "Company", "Employees", "AI Chat", "Well Viewer"])
-    await expect(launcher.getByRole("button", { name: app })).toBeVisible();
-  await expect(page.locator("canvas")).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: /motion|rotate/i }),
-  ).toHaveCount(0);
-  await launcher.getByRole("button", { name: "Well Viewer" }).click();
-  await expect(page.locator(".well-fallback")).toContainText(
-    "3D is unavailable in this browser.",
-  );
-  await expect(
-    page.getByRole("img", {
-      name: "Illustrative main bore with three horizontal lateral legs",
-    }),
-  ).toBeVisible();
-  await expect(page.getByText("PulseCrest · Horizon 01")).toBeVisible();
-  await expect(page.locator("canvas")).toHaveCount(0);
+  await expect(page.locator("h1")).not.toHaveText("Demo");
+  await expect(page.getByRole("navigation", { name: "Employee apps" })).toHaveCount(0);
+  const sitemap = await (await request.get("/sitemap.xml")).text();
+  expect(sitemap).not.toContain("/demo");
+  expect(sitemap).toContain("/about");
+  expect(sitemap).toContain("/contact");
+});
+for (const [route, title, h1] of [
+  ["/about", "About iRobotX", "We build the future across four industries."],
+  ["/contact", "Contact iRobotX", "Tell us what you want to build."],
+]) {
+  test(`${route} has unique SEO metadata`, async ({ page }) => {
+    await page.goto(route);
+    await expect(page).toHaveTitle(new RegExp(title));
+    await expect(page.locator("h1")).toHaveCount(1);
+    await expect(page.locator("h1")).toHaveText(h1);
+    await expect(page.locator('link[rel="canonical"]')).toHaveAttribute("href", `https://irobotx.io${route}`);
+    for (const sel of ['meta[name="description"]', 'meta[property="og:title"]', 'meta[property="og:description"]', 'meta[name="twitter:title"]'])
+      await expect(page.locator(sel)).toHaveAttribute("content", /\S/);
+    await expect(page.locator('meta[property="og:title"]')).toHaveAttribute("content", new RegExp(title));
+    if (route === "/about")
+      for (const name of ["Robotics", "FinTech", "Oil & Gas", "Entertainment"])
+        await expect(page.getByRole("heading", { level: 2, name, exact: true })).toBeVisible();
+  });
+}
+test("built pages carry Organization structured data", async () => {
+  test.skip(!existsSync("dist/about.html"), "run `npm run build` first");
+  for (const route of ["/about", "/contact"]) {
+    const html = readFileSync(`dist${route}.html`, "utf8");
+    const match = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
+    expect(match, route).not.toBeNull();
+    const data = JSON.parse(match![1]);
+    const types = (data["@graph"] ?? [data]).map((n: { "@type": string }) => n["@type"]);
+    expect(types).toContain("Organization");
+  }
 });
 test("invalid invitation and contact validation are usable", async ({
   page,
@@ -151,9 +179,9 @@ test("home falls back to a static page with every industry when WebGL is unavail
   await page.goto("/");
   await expect(page.locator("h1")).toContainText("We build the systems");
   await expect(page.locator("canvas")).toHaveCount(0);
-  for (const name of ["Humanoid Robotics", "FinTech", "Oil & Gas", "Entertainment"])
+  for (const name of ["Robotics", "FinTech", "Oil & Gas", "Entertainment"])
     await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Start a project" })).toHaveAttribute("href", "/contact");
+  await expect(page.locator("#main").getByRole("link", { name: "Start a project" }).first()).toHaveAttribute("href", "/contact");
 });
 
 test.describe("immersive home", () => {
@@ -169,7 +197,7 @@ test.describe("immersive home", () => {
       await expect(page.locator(".x-canvas canvas")).toHaveCount(1);
       await expect(page.locator("h1")).toContainText("We build the systems");
       const stage = page.locator(".x-stage");
-      for (const [index, name] of ["Humanoid Robotics", "FinTech", "Oil & Gas", "Entertainment"].entries()) {
+      for (const [index, name] of ["Robotics", "FinTech", "Oil & Gas", "Entertainment"].entries()) {
         await page.getByRole("button", { name, exact: true }).click();
         await expect(stage).toHaveAttribute("data-chapter", String(index + 1));
         await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();
@@ -180,7 +208,7 @@ test.describe("immersive home", () => {
       await page.waitForTimeout(950);
       await page.keyboard.press("ArrowDown");
       await expect(stage).toHaveAttribute("data-chapter", "1");
-      await expect(page.getByRole("link", { name: "Start a project" })).toBeVisible();
+      await expect(page.locator("#main").getByRole("link", { name: "Start a project" })).toBeVisible();
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
       ).toBe(true);

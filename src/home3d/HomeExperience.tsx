@@ -9,7 +9,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useReducedMotion } from "motion/react";
+import { hasWebGL, useReducedMotion } from "../site/motion";
 import { ArrowUpRight } from "lucide-react";
 import { experience } from "../content";
 import { Link } from "../App";
@@ -18,15 +18,6 @@ import "./home3d.css";
 
 const Scene = lazy(() => import("./Scene"));
 const labels = ["iRobotX Core", ...experience.chapters.map((c) => c.name)];
-
-function hasWebGL() {
-  try {
-    const canvas = document.createElement("canvas");
-    return !!(canvas.getContext("webgl2") || canvas.getContext("webgl"));
-  } catch {
-    return false;
-  }
-}
 
 class SceneBoundary extends Component<
   { children: ReactNode; onError: () => void },
@@ -69,7 +60,7 @@ function StaticHome() {
         />
         <img
           src="/images/home-still-1536.webp"
-          alt="Glowing particle humanoid robot formed from the iRobotX network"
+          alt="Glowing particle robotic arm welding a part, formed from the iRobotX network"
           fetchPriority="high"
         />
       </picture>
@@ -100,9 +91,18 @@ function Experience({ onFail }: { onFail: () => void }) {
   const [chapter, setChapter] = useState(0);
   const [paused, setPaused] = useState(false);
   const stage = useRef<HTMLDivElement>(null);
-  const holds = useRef({ hover: false, touch: false, hidden: false });
+  const holds = useRef({ hover: false, touch: false, hidden: false, drag: false });
   const lastNav = useRef(0);
-  const touchStart = useRef<{ x: number; y: number } | null>(null);
+  const gesture = useRef<{
+    id: number;
+    x: number;
+    y: number;
+    az: number;
+    el: number;
+    mouse: boolean;
+    mode: "" | "orbit" | "swipe";
+  } | null>(null);
+  const [preview, setPreview] = useState(-1);
   const [device] = useState(() => {
     const mobile = matchMedia("(max-width: 820px), (pointer: coarse)").matches;
     const lowEnd = (navigator.hardwareConcurrency || 8) <= 4;
@@ -119,11 +119,11 @@ function Experience({ onFail }: { onFail: () => void }) {
 
   const syncPause = useCallback(() => {
     const h = holds.current;
-    director.paused = h.hover || h.touch || h.hidden;
-    setPaused(h.hover || h.touch);
+    director.paused = h.hover || h.touch || h.hidden || h.drag;
+    setPaused(h.hover || h.touch || h.drag);
   }, [director]);
   const hold = useCallback(
-    (key: "hover" | "touch" | "hidden", value: boolean) => {
+    (key: "hover" | "touch" | "hidden" | "drag", value: boolean) => {
       holds.current[key] = value;
       syncPause();
     },
@@ -166,21 +166,69 @@ function Experience({ onFail }: { onFail: () => void }) {
       onWheel={(e) => {
         if (Math.abs(e.deltaY) > 24) step(e.deltaY > 0 ? 1 : -1);
       }}
+      onPointerMove={(e) => {
+        const p = director.pointer;
+        p.x = (e.clientX / innerWidth) * 2 - 1;
+        p.y = -((e.clientY / innerHeight) * 2 - 1);
+        p.active = true;
+        p.movedAt = performance.now() / 1000;
+        const g = gesture.current;
+        if (!g || g.id !== e.pointerId) return;
+        const dx = e.clientX - g.x,
+          dy = e.clientY - g.y;
+        if (!g.mode && Math.hypot(dx, dy) > (g.mouse ? 4 : 10)) {
+          g.mode = g.mouse || Math.abs(dx) > Math.abs(dy) ? "orbit" : "swipe";
+          if (g.mode === "orbit") {
+            director.orbit.dragging = true;
+            hold("drag", true);
+            e.currentTarget.setPointerCapture(e.pointerId);
+          }
+        }
+        if (g.mode === "orbit") {
+          director.orbit.az = Math.max(-0.85, Math.min(0.85, g.az - dx * 0.005));
+          director.orbit.el = Math.max(-0.12, Math.min(0.45, g.el + dy * 0.004));
+        }
+      }}
+      onPointerLeave={(e) => {
+        if (e.pointerType === "mouse") director.pointer.active = false;
+      }}
       onPointerDown={(e) => {
+        const target = e.target as HTMLElement;
+        if (target.closest("a,button,.x-copy,.x-chapters")) return;
         if (e.pointerType !== "mouse") hold("touch", true);
-        touchStart.current = { x: e.clientX, y: e.clientY };
+        gesture.current = {
+          id: e.pointerId,
+          x: e.clientX,
+          y: e.clientY,
+          az: director.orbit.az,
+          el: director.orbit.el,
+          mouse: e.pointerType === "mouse",
+          mode: "",
+        };
       }}
       onPointerUp={(e) => {
-        const s = touchStart.current;
-        touchStart.current = null;
-        if (e.pointerType !== "mouse") hold("touch", false);
-        if (!s || e.pointerType === "mouse") return;
-        const dx = e.clientX - s.x,
-          dy = e.clientY - s.y;
-        if (Math.max(Math.abs(dx), Math.abs(dy)) > 48)
-          step((Math.abs(dy) > Math.abs(dx) ? dy : dx) < 0 ? 1 : -1);
+        const g = gesture.current;
+        gesture.current = null;
+        if (e.pointerType !== "mouse") {
+          hold("touch", false);
+          director.pointer.active = false;
+        }
+        if (!g || g.id !== e.pointerId) return;
+        if (g.mode === "orbit") {
+          director.orbit.dragging = false;
+          director.orbit.releasedAt = performance.now() / 1000;
+          hold("drag", false);
+        } else if (g.mode === "swipe") {
+          if (Math.abs(e.clientY - g.y) > 48) step(e.clientY < g.y ? 1 : -1);
+        } else director.kicks++;
       }}
-      onPointerCancel={() => hold("touch", false)}
+      onPointerCancel={() => {
+        gesture.current = null;
+        director.orbit.dragging = false;
+        director.orbit.releasedAt = performance.now() / 1000;
+        holds.current.drag = false;
+        hold("touch", false);
+      }}
     >
       <div className="x-canvas">
         <SceneBoundary onError={onFail}>
@@ -232,6 +280,10 @@ function Experience({ onFail }: { onFail: () => void }) {
             aria-label={label}
             aria-current={chapter === i ? "step" : undefined}
             onClick={() => director.go(i)}
+            onPointerEnter={(e) => e.pointerType === "mouse" && setPreview(i)}
+            onPointerLeave={() => setPreview(-1)}
+            onFocus={() => setPreview(i)}
+            onBlur={() => setPreview(-1)}
           >
             <span className="x-num">0{i}</span>
             <span className="x-label">{label}</span>
@@ -241,12 +293,27 @@ function Experience({ onFail }: { onFail: () => void }) {
           </button>
         ))}
       </nav>
+      {experience.chapters.map((c, i) => (
+        <figure
+          key={c.id}
+          className={`x-preview${preview === i + 1 && chapter !== i + 1 ? " is-open" : ""}`}
+          style={{ ["--i" as string]: i + 1 }}
+          aria-hidden="true"
+        >
+          <img src={`/images/industry-${c.id}-480.webp`} alt="" loading="lazy" width={240} height={150} />
+          <figcaption>
+            <b>0{i + 1}</b> {c.name}
+            <span>{c.line}</span>
+          </figcaption>
+        </figure>
+      ))}
       <div className="x-hud" aria-hidden="true">
         <span className="x-dot" />
         <span>iRobotX OS</span>
         <span className="x-sep">/</span>
         <span>{labels[chapter]}</span>
         <span className="x-state">{paused ? "Paused" : "Auto tour"}</span>
+        <span className="x-hint">Drag to orbit · Click to interact</span>
       </div>
     </div>
   );

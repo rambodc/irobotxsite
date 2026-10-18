@@ -139,53 +139,83 @@ function fill(n: number, parts: Part[], out: Float32Array, anim: Float32Array, w
   });
 }
 
+// Industrial arm. aAnim.x stores the segment id; the shader applies forward kinematics.
+// 0 = static scene (world), 1 = base (world), 2 turret, 3 upper arm, 4 forearm, 5 wrist, 6 tool, 7 sparks.
+export const ARM = {
+  turretY: -2.5,
+  shoulder: 0.9,
+  upper: 2.6,
+  fore: 2.2,
+  wrist: 0.5,
+  tip: 0.75,
+  part: [2.65, -1.35, 0.8] as V,
+  seam: 0.38,
+};
+function taperBox(y0: number, y1: number, w0: number, w1: number, d0: number, d1: number): V {
+  const t = rnd(),
+    y = y0 + (y1 - y0) * t,
+    w = (w0 + (w1 - w0) * t) / 2,
+    d = (d0 + (d1 - d0) * t) / 2;
+  if (rnd() < 0.35)
+    return jit([rnd() < 0.5 ? -w : w, y, rnd() < 0.5 ? -d : d], 0.006);
+  const u = rnd() * (4 * w + 4 * d);
+  if (u < 2 * w) return [-w + u, y, d];
+  if (u < 4 * w) return [-w + (u - 2 * w), y, -d];
+  if (u < 4 * w + 2 * d) return [w, y, -d + (u - 4 * w)];
+  return [-w, y, -d + (u - 4 * w - 2 * d)];
+}
+const disc = (c: V, rad: number): V => {
+  const t = r(0, Math.PI * 2),
+    q = Math.sqrt(rnd()) * rad;
+  return [c[0] + Math.cos(t) * q, c[1], c[2] + Math.sin(t) * q];
+};
 function robotParts(): Part[] {
-  const mirror = (f: (s: number) => V): (() => Out) => () => ({
-    p: f(rnd() < 0.5 ? -1 : 1),
-  });
-  const visor = (): Out => {
-    for (;;) {
-      const d = dir();
-      if (d[2] > 0.45 && d[1] > -0.12 && d[1] < 0.2)
-        return { p: [d[0] * 0.5, 3.18 + d[1] * 0.62, d[2] * 0.56], warm: 1 };
-    }
-  };
+  const seg = (id: number, f: () => V, warm = 0): (() => Out) => () => ({ p: f(), anim: id, warm });
+  const grid: [V, V][] = [];
+  for (let v = -4.5; v <= 4.51; v += 0.75) {
+    grid.push([[v, -3.02, -4.5], [v, -3.02, 4.5]]);
+    grid.push([[-4.5, -3.02, v], [4.5, -3.02, v]]);
+  }
+  const [px, py, pz] = ARM.part;
+  const table = lines(boxEdges([2.0, -3, 0.15], [3.3, -1.7, 1.45]), 0.008);
+  const conveyor = lines(
+    [
+      ...boxEdges([-3.8, -3, -2.4], [-1.4, -2.35, -1.5]),
+      ...[-3.4, -3.0, -2.6, -2.2, -1.8].map((x) => [[x, -2.35, -2.4], [x, -2.35, -1.5]] as [V, V]),
+    ],
+    0.008,
+  );
+  const crates = lines([...boxEdges([-3.3, -2.35, -2.2], [-2.8, -1.95, -1.7]), ...boxEdges([-2.3, -2.35, -2.25], [-1.8, -2.0, -1.65])], 0.008);
+  const plates = lines(
+    [...boxEdges([-0.45, 0.35, 0.3], [0.45, 1.25, 0.48]), ...boxEdges([-0.45, 0.35, -0.48], [0.45, 1.25, -0.3])],
+    0.008,
+  );
+  const housing = lines(boxEdges([-0.25, -0.2, -0.25], [0.25, 0.45, 0.25]), 0.008);
   return [
-    [8, () => ({ p: ellipsoid([0, 3.15, 0], [0.5, 0.62, 0.55]) })],
-    [2.2, visor],
-    [1, () => ({ p: limb([0, 2.4, 0], [0, 2.62, 0], 0.17) })],
-    [14, () => ({ p: ellipsoid([0, 1.78, 0], [0.95, 0.72, 0.5]) })],
-    [
-      1.6,
-      () => {
-        const a = r(0, Math.PI * 2),
-          s = Math.sqrt(rnd()) * 0.12;
-        return { p: [Math.cos(a) * s, 1.9 + Math.sin(a) * s, 0.5], warm: 1 };
-      },
-    ],
-    [
-      1.4,
-      () => {
-        const t = r(0, Math.PI * 2);
-        return { p: jit([Math.cos(t) * 0.17, 1.9 + Math.sin(t) * 0.17, 0.52], 0.01), warm: 1 };
-      },
-    ],
-    [5, () => ({ p: limb([0, 0.62, 0], [0, 1.2, 0], 0.46, 0.58) })],
-    [2, () => ({ p: ring([0, pick([0.75, 0.9, 1.05]), 0], 0.54, 0.008) })],
-    [4, () => ({ p: ellipsoid([0, 0.28, 0], [0.62, 0.3, 0.42]) })],
-    [4, mirror((s) => ellipsoid([s * 1.12, 2.2, 0], [0.32, 0.3, 0.32]))],
-    [7, mirror((s) => limb([s * 1.2, 2.05, 0], [s * 1.42, 0.95, 0.05], 0.21, 0.18))],
-    [2, mirror((s) => ellipsoid([s * 1.42, 0.95, 0.05], [0.19, 0.19, 0.19]))],
-    [6, mirror((s) => limb([s * 1.42, 0.95, 0.05], [s * 1.56, -0.15, 0.18], 0.17, 0.14))],
-    [2.4, mirror((s) => ellipsoid([s * 1.58, -0.42, 0.2], [0.13, 0.22, 0.1]))],
-    [2, mirror((s) => ellipsoid([s * 0.36, 0.05, 0], [0.24, 0.24, 0.24]))],
-    [10, mirror((s) => limb([s * 0.38, -0.05, 0], [s * 0.42, -1.6, 0.02], 0.27, 0.21))],
-    [2, mirror((s) => ellipsoid([s * 0.42, -1.65, 0.04], [0.2, 0.2, 0.2]))],
-    [8, mirror((s) => limb([s * 0.42, -1.7, 0.02], [s * 0.44, -3.12, 0], 0.2, 0.15))],
-    [3, mirror((s) => lines(boxEdges([s * 0.45 - 0.16, -3.42, -0.15], [s * 0.45 + 0.16, -3.22, 0.42]))())],
-    [3, () => ({ p: ring([0, -3.45, 0.1], r(1.6, 1.75), 0.01), warm: rnd() < 0.3 ? 1 : 0 })],
-    [2.5, () => ({ p: ring([0, -3.45, 0.1], r(0.2, 2.4), 0.01) })],
-    [2, () => ({ p: ring([0, r(-3, 3.8), 0], 2.15, 0.01) })],
+    [8, seg(0, () => lines(grid, 0.006)())],
+    [1.5, seg(0, () => ring([0, -3.02, 0], r(1.3, 1.45), 0.01), 0.35)],
+    [5, seg(0, table)],
+    [2.5, seg(0, () => disc([2.65, -1.7, 0.8], 0.62))],
+    [3, seg(0, () => limb([px, -1.7, pz], [px, py, pz], ARM.seam + 0.02))],
+    [1.2, seg(0, () => disc([px, py, pz], ARM.seam))],
+    [1, seg(0, () => ring([px, py + 0.01, pz], ARM.seam, 0.006), 0.8)],
+    [4, seg(0, conveyor)],
+    [2.5, seg(0, crates, 0.25)],
+    [5, seg(1, () => limb([0, -3, 0], [0, -2.5, 0], 0.95, 0.85))],
+    [1.5, seg(1, () => ring([0, -2.5, 0], r(0.3, 0.85), 0.006))],
+    [4, seg(2, () => limb([0, 0, 0], [0, 0.45, 0], 0.68, 0.58))],
+    [4, seg(2, plates)],
+    [3, seg(2, () => limb([0, ARM.shoulder, -0.6], [0, ARM.shoulder, 0.6], 0.3))],
+    [16, seg(3, () => taperBox(0, ARM.upper, 0.5, 0.36, 0.42, 0.34))],
+    [2, seg(3, () => limb([0, ARM.upper, -0.3], [0, ARM.upper, 0.3], 0.27))],
+    [3, seg(4, housing)],
+    [10, seg(4, () => taperBox(0.45, ARM.fore, 0.32, 0.24, 0.3, 0.22))],
+    [3, seg(5, () => limb([0, 0, 0], [0, ARM.wrist, 0], 0.17, 0.15))],
+    [1, seg(5, () => ring([0, ARM.wrist * 0.5, 0], 0.19, 0.006), 0.4)],
+    [1, seg(6, () => disc([0, 0, 0], 0.22))],
+    [2, seg(6, () => limb([0.04, 0.05, 0], [0, 0.5, 0], 0.1, 0.07))],
+    [1, seg(6, () => limb([0, 0.5, 0], [0, ARM.tip, 0], 0.065, 0.025), 0.7)],
+    [6, seg(7, () => [0, 0, 0], 1)],
   ];
 }
 
@@ -342,18 +372,34 @@ function entParts(): Part[] {
       warm: i % 2,
     });
   }
-  const seat = () => {
-    const k = Math.floor(rnd() * 10),
-      rad = 3.1 + k * 0.33,
-      th = r(Math.PI * 0.72, Math.PI * 2.28);
-    return { p: jit([Math.cos(th) * rad, -2 + k * 0.3, Math.sin(th) * rad], 0.02) as V, warm: rnd() < 0.08 ? 1 : 0 };
+  const seat = (): Out => {
+    const k = Math.floor(rnd() * 12),
+      rad = 3.0 + k * 0.3,
+      step = 0.15 / rad;
+    let th = r(Math.PI * 0.7, Math.PI * 2.3);
+    if ((th % (Math.PI / 7)) < 0.05) th += 0.06; // aisles
+    th = Math.round(th / step) * step;
+    const front = rnd() < 0.3;
+    return {
+      p: front
+        ? jit([Math.cos(th) * (rad - 0.12), -2 + k * 0.28 - 0.12, Math.sin(th) * (rad - 0.12)], 0.006)
+        : jit([Math.cos(th) * rad, -2 + k * 0.28, Math.sin(th) * rad], 0.012),
+      warm: !front && rnd() < 0.07 ? 1 : 0,
+    };
+  };
+  const bowlRim = (): Out => {
+    const th = r(Math.PI * 0.7, Math.PI * 2.3),
+      k = rnd() < 0.5 ? 0 : 12;
+    const rad = 3.0 + k * 0.3 - 0.1;
+    return { p: jit([Math.cos(th) * rad, -2 + k * 0.28 - 0.1, Math.sin(th) * rad], 0.008) };
   };
   return [
     [8, () => ({ p: stage() })],
     [5, () => ({ p: [r(-1.8, 1.8), -1.55, r(-1.1, 1.1)] as V })],
     [5, () => ({ p: truss() })],
     [4, () => ({ p: speakers() })],
-    [36, seat],
+    [40, seat],
+    [5, bowlRim],
     [
       17,
       () => {
@@ -366,7 +412,7 @@ function entParts(): Part[] {
       },
     ],
     [
-      11,
+      9,
       () => {
         const k = Math.floor(rnd() * 8),
           rad = 0.4 + k * 0.6 + gauss(0.02),
@@ -378,7 +424,7 @@ function entParts(): Part[] {
   ];
 }
 
-function lattice(n: number, a: Float32Array, b: Float32Array) {
+export function lattice(n: number, a: Float32Array, b: Float32Array) {
   const nodes: V[] = [];
   const outer = 120;
   for (let i = 0; i < outer; i++) {
@@ -455,4 +501,60 @@ export function buildForms(count: number): FormSet {
   fill(count, entParts(), set.ent, set.anim, set.warm, 3);
   for (let i = 0; i < count * 4; i++) set.rand[i] = rnd();
   return set;
+}
+
+// Beacon for the Contact page: a slender mast topped by the iRobotX core, emitting signal shells.
+// type: 0 static, 1 horizontal ripple, 2 rising stream, 3 signal shell (a = unit direction).
+export function buildBeacon(n: number) {
+  const a = new Float32Array(n * 3),
+    rand = new Float32Array(n * 4),
+    type = new Float32Array(n),
+    warm = new Float32Array(n);
+  const legs: [V, V][] = [];
+  const corner = (y: number, sx: number, sz: number): V => {
+    const w = 0.5 + (0.08 - 0.5) * ((y + 2.6) / 4.4);
+    return [sx * w, y, sz * w];
+  };
+  const cs: [number, number][] = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+  for (const [sx, sz] of cs) legs.push([corner(-2.6, sx, sz), corner(1.8, sx, sz)]);
+  for (let y = -2.6; y < 1.8; y += 0.55)
+    for (let k = 0; k < 4; k++) {
+      const [ax, az] = cs[k],
+        [bx, bz] = cs[(k + 1) % 4];
+      legs.push([corner(y, ax, az), corner(y + 0.55, bx, bz)]);
+      legs.push([corner(y, ax, az), corner(y, bx, bz)]);
+    }
+  const mast = lines(legs, 0.008);
+  for (let i = 0; i < n; i++) {
+    const x = rnd();
+    let p: V,
+      t = 0,
+      w = 0;
+    if (x < 0.22) p = mast();
+    else if (x < 0.32) {
+      p = ellipsoid([0, 2.25, 0], [0.42, 0.42, 0.42]);
+      w = rnd() < 0.5 ? 1 : 0.4;
+    } else if (x < 0.4) {
+      p = [gauss(0.03), r(-2.6, 2.0), gauss(0.03)];
+      t = 2;
+      w = 1;
+    } else if (x < 0.68) {
+      p = dir();
+      t = 3;
+      w = rnd() < 0.25 ? 1 : 0;
+    } else if (x < 0.9) {
+      const k = Math.floor(rnd() * 6);
+      p = ring([0, -2.62, 0], 0.6 + k * 0.75, 0.01);
+      t = 1;
+    } else {
+      const d = dir(),
+        rad = r(4.5, 8);
+      p = [d[0] * rad, d[1] * rad * 0.6, d[2] * rad];
+    }
+    a.set(p, i * 3);
+    type[i] = t;
+    warm[i] = w;
+    for (let j = 0; j < 4; j++) rand[i * 4 + j] = rnd();
+  }
+  return { a, rand, type, warm };
 }

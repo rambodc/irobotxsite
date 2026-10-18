@@ -1,164 +1,14 @@
+// Public copy for the website. Edit text here; layout lives in src/home3d and src/site.
 export const company = {
   name: "iRobotX",
+  legalName: "iRobotX",
   email: "info@irobotx.io",
   location: "Calgary, Alberta",
-  headline: "AI-powered software for connected Oil & Gas operations.",
-  description:
-    "We build custom web-based platforms that bring your wells, drilling, production, people, and service companies into one place—with AI built around the way you work.",
-};
-export const images = {
-  oilfield: {
-    src: "oilfield",
-    alt: "Cinematic blue oilfield with illuminated connections between drilling and production facilities",
-  },
-  well: {
-    src: "well",
-    alt: "Illustrative cutaway of a well descending through geological layers into a horizontal reservoir",
-  },
-  operations: {
-    src: "operations",
-    alt: "Oilfield facilities and service operations connected by blue pathways across the landscape",
-  },
-  ai: {
-    src: "ai",
-    alt: "Conceptual intelligence core connecting well, production, and subsurface information",
-  },
-  robotics: {
-    src: "robotics",
-    alt: "Industrial humanoid robot with articulated components in a blue-lit engineering facility",
-  },
-  fintech: {
-    src: "fintech",
-    alt: "Conceptual financial institutions connected by luminous blue data channels",
-  },
-} as const;
-export type ImageId = keyof typeof images;
-export const home = {
-  eyebrow: "Custom platforms. Oil & Gas intelligence.",
-  primary: "Discuss your project",
-  secondary: "Explore the possibilities",
-  strip: [
-    "Wells & reservoirs",
-    "Drilling & production",
-    "People & service partners",
-  ],
-  operations: {
-    eyebrow: "01 / Your operation, connected",
-    title: "One view of your entire operation.",
-    text: "Your information lives across teams, tools, and companies. We build a shared operational workspace that brings it together—so the people who need context can find it, understand it, and act on it.",
-    points: [
-      {
-        title: "From the well to the office",
-        text: "Bring well information, drilling activity, and production context together, with real-time visibility through your connected data sources.",
-      },
-      {
-        title: "Your people. Your partners.",
-        text: "Connect staff and the service companies working with you, with access and workflows built around their roles.",
-      },
-      {
-        title: "Connected to what you already use",
-        text: "Bring existing systems, third-party tools, and field information into a web-based application designed for your business.",
-      },
-    ],
-  },
-  ai: {
-    eyebrow: "02 / Intelligence, on your terms",
-    title: "AI built around your business.",
-    text: "Choose what you want AI to help you do. We integrate the models and tools that fit your needs, connecting them to your data and workflows to build an application that goes beyond graphs and forms.",
-    points: [
-      "Ask questions about your operations",
-      "Understand well and production data",
-      "Generate reports and operational updates",
-      "Find information across connected systems",
-      "Automate the workflows that matter to you",
-    ],
-    example:
-      "What changed across our operations, and what needs our attention?",
-    caption:
-      "An example of the questions your custom AI workspace could help answer.",
-  },
-  process: {
-    eyebrow: "03 / Designed for your reality",
-    title: "Built around the way you work.",
-    text: "A useful platform starts with understanding your company. We work with your teams to turn operational complexity into software that makes sense for them.",
-    steps: [
-      {
-        title: "Understand your operation",
-        text: "Map the people, systems, information, and everyday challenges that shape your business.",
-      },
-      {
-        title: "Connect what matters",
-        text: "Define the data connections, partner access, and AI tools your platform needs.",
-      },
-      {
-        title: "Build, learn, evolve",
-        text: "Develop your application with your teams and refine it as your needs grow.",
-      },
-    ],
-  },
-  disciplines: {
-    eyebrow: "A broader engineering perspective",
-    title: "Deep experience. Connected disciplines.",
-    text: "Our work in robotics and financial technology brings another dimension to the systems we build.",
-  },
-};
-export const industries = [
-  {
-    id: "oil-gas",
-    number: "01",
-    name: "Oil & Gas",
-    title: "An operational picture that brings everyone together.",
-    text: "We develop custom software for Oil & Gas companies that want a clearer understanding of their operations. Wells, drilling, production, staff, and service partners can share a connected workspace, with access to information tailored to the people using it.",
-    detail:
-      "Our approach combines operational understanding, integrated data, and AI tools selected around your needs. From interpreting well information to coordinating workflows and generating updates, we build the capabilities that help your company see what is happening and work with that knowledge.",
-    tags: [
-      "Custom operational platforms",
-      "Connected teams & partners",
-      "AI integration",
-    ],
-    image: "well",
-  },
-  {
-    id: "robotics",
-    number: "02",
-    name: "Robotics",
-    title: "Intelligence in the physical world.",
-    text: "We have experience developing complex robotics for industrial use, including humanoid robotics. Our work brings software, intelligent behavior, and physical systems together to address demanding engineering challenges.",
-    detail:
-      "That experience informs how we approach industrial technology: understanding the interaction between machines, people, and the environments in which they work.",
-    tags: ["Industrial robotics", "Humanoid experience", "Intelligent systems"],
-    image: "robotics",
-  },
-  {
-    id: "fintech",
-    number: "03",
-    name: "FinTech",
-    title: "Financial technology built to connect.",
-    text: "We bring extensive experience developing XRP Ledger solutions for large-scale, real-world financial applications. Our experience also includes central bank digital currencies (CBDCs) and interoperability solutions for the banking sector.",
-    detail:
-      "We apply that background to software that helps financial systems work together, with integrations and workflows designed around the needs of the organizations using them.",
-    tags: ["XRP Ledger", "CBDC experience", "Banking interoperability"],
-    image: "fintech",
-  },
-] as const;
-export const about = {
-  eyebrow: "About iRobotX",
-  title: "Technology that understands the operation.",
-  intro:
-    "We are a Calgary software, robotics, and technology company focused on building custom, AI-enabled platforms for Oil & Gas.",
-  eyebrow2: "Oil & Gas at the core",
-  heading: "Connected people. Clearer operations.",
-  paragraphs: [
-    "An Oil & Gas company is an interconnected system of people, assets, information, and service partners. The software supporting it should reflect that reality.",
-    "We work with companies to understand how their operations run, connect the information they rely on, and develop web-based applications that help their teams see the bigger picture. AI is a central part of that work, tailored to the tools and capabilities each customer wants to use.",
-  ],
-};
-export const demoPage = {
-  intro:
-    "Explore an Oil & Gas workspace with AI Chat, a 3D multilateral well, and employee tools.",
+  country: "Canada",
+  url: "https://irobotx.io",
 };
 // Stable app IDs are shared with the private portal and backend assignments.
-export const demos = [
+export const portalApps = [
   {
     id: "oil-gas",
     name: "Field intelligence",
@@ -178,20 +28,6 @@ export const demos = [
     text: "Future demonstrations of connected financial applications and interoperability.",
   },
 ] as const;
-export const contact = {
-  eyebrow: "Let’s build around your business",
-  title: "Your operation. Your possibilities.",
-  intro:
-    "Tell us about your company, the systems you use, and what you want to make possible. Let’s explore a custom platform, AI integration, or an operational challenge together.",
-  heading: "Start with what matters to you.",
-  text: "From connected Oil & Gas operations to robotics and financial technology, we’d like to understand what you want to build.",
-};
-export const cta = {
-  eyebrow: "Your operation. Our next conversation.",
-  title: "What would you like your technology to do?",
-  text: "Tell us about your operations and the possibilities you see. We’ll explore how to build them with you.",
-  button: "Discuss your project",
-};
 export const experience = {
   eyebrow: "iRobotX · One system, every industry",
   headline: "We build the systems that run tomorrow’s industries.",
@@ -203,9 +39,9 @@ export const experience = {
   chapters: [
     {
       id: "robotics",
-      name: "Humanoid Robotics",
-      line: "Robots that join the workforce, not just the demo.",
-      copy: "Humanoid fleets run by one control system, taking on repetitive and high-risk work to cut labour costs and human error.",
+      name: "Robotics",
+      line: "Automation that works the line, shift after shift.",
+      copy: "Industrial robots and automation cells coordinated by one control system, taking on precise, repetitive and high-risk work to cut labour costs and defects.",
     },
     {
       id: "fintech",
@@ -227,22 +63,85 @@ export const experience = {
     },
   ],
 };
+export const about = {
+  eyebrow: "About iRobotX",
+  headline: "We build the future across four industries.",
+  intro:
+    "iRobotX is a technology company that brings advanced technology and management systems to large corporations. We design, build and run the platforms that streamline how big operations work, so our clients cut costs and errors and grow in new ways.",
+  promise: [
+    { value: "Lower cost", text: "Automate the repetitive and remove duplicated systems so every dollar does more." },
+    { value: "Fewer errors", text: "One source of truth and machine-checked workflows replace manual handoffs." },
+    { value: "New growth", text: "Data and automation open products, services and markets that were out of reach." },
+  ],
+  industries: [
+    {
+      id: "robotics",
+      name: "Robotics",
+      headline: "Industrial robots and automation, orchestrated.",
+      text: "We integrate robotic arms, automation cells and the software that coordinates them, from vision-guided picking to welding and inspection. One control layer schedules the work, tracks quality and reports to the business, so production runs faster with fewer defects and less risk to people.",
+      points: ["Robot cell integration and control software", "Quality tracking and predictive maintenance", "Safety-first automation of high-risk tasks"],
+    },
+    {
+      id: "fintech",
+      name: "FinTech",
+      headline: "Financial systems that reconcile themselves.",
+      text: "We build ledgers, payment flows, digital-asset and risk platforms that keep every transaction accounted for in real time. Automated reconciliation and controls close the books faster, remove manual errors and give finance teams room to launch new products.",
+      points: ["Real-time ledgers and reconciliation", "Payments and digital-asset infrastructure", "Risk, compliance and reporting automation"],
+    },
+    {
+      id: "oil-gas",
+      name: "Oil & Gas",
+      headline: "From the rig floor to the reservoir, one platform.",
+      text: "We connect wells, drilling, production, field crews and service partners in one operating platform with AI built around the way each company works. Teams see the same live picture, act sooner and avoid the costly mistakes that come from disconnected spreadsheets and systems.",
+      points: ["Connected well, drilling and production data", "Field workforce and service-partner coordination", "AI assistance for planning and reporting"],
+    },
+    {
+      id: "entertainment",
+      name: "Entertainment",
+      headline: "Live experiences, run at stadium scale.",
+      text: "We build ticketing, crowd-flow and show-control systems for venues and live productions. One system keeps entry, staff, stage technology and audience data in sync, so every event runs on cue and each audience becomes a source of new growth.",
+      points: ["Ticketing and access control", "Crowd, staff and venue operations", "Show control and audience insight"],
+    },
+  ],
+  approach: {
+    title: "One system, every industry.",
+    text: "The same iRobotX core powers each platform we build: secure data foundations, automation and AI that fit your management processes rather than replacing them.",
+    steps: [
+      { name: "Map", text: "We study how your operation really runs and where cost and errors hide." },
+      { name: "Build", text: "We design and deliver the system around your teams, data and existing tools." },
+      { name: "Run", text: "We operate, monitor and improve it with you as the business grows." },
+    ],
+  },
+};
+export const contact = {
+  eyebrow: "Contact iRobotX",
+  headline: "Tell us what you want to build.",
+  intro:
+    "Share the operation, the challenge or the idea. Our team replies within one business day to explore how a custom system could cut your costs and errors and open new growth.",
+  details: [
+    { label: "Email", value: "info@irobotx.io", href: "mailto:info@irobotx.io" },
+    { label: "Based in", value: "Calgary, Alberta, Canada" },
+    { label: "Industries", value: "Robotics · FinTech · Oil & Gas · Entertainment" },
+  ],
+};
+const description = {
+  home: "iRobotX builds advanced technology and management systems for large enterprises in robotics, FinTech, Oil & Gas and entertainment, cutting costs and errors and unlocking new growth.",
+  about:
+    "iRobotX is a Calgary technology company building advanced technology and management systems for large corporations in robotics, FinTech, Oil & Gas and entertainment.",
+  contact:
+    "Contact iRobotX to discuss a custom technology or management system for your robotics, FinTech, Oil & Gas or entertainment operation.",
+};
 export const metadata = {
   "/": {
     title: "iRobotX | Systems for Robotics, FinTech, Oil & Gas and Entertainment",
-    description:
-      "iRobotX builds advanced technology and management systems for large enterprises in humanoid robotics, FinTech, Oil & Gas and entertainment, cutting costs and errors and unlocking new growth.",
+    description: description.home,
   },
   "/about": {
-    title: "About our technology company | iRobotX",
-    description: about.intro,
-  },
-  "/demo": {
-    title: "Employee workspace demo | iRobotX",
-    description: demoPage.intro,
+    title: "About iRobotX | Technology for Robotics, FinTech, Oil & Gas and Entertainment",
+    description: description.about,
   },
   "/contact": {
-    title: "Discuss your project | iRobotX",
-    description: contact.intro,
+    title: "Contact iRobotX | Start a Project",
+    description: description.contact,
   },
 };

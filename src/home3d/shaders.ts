@@ -7,6 +7,13 @@ uniform float uRef;
 uniform float uIntensity;
 uniform int uFrom;
 uniform int uTo;
+uniform mat4 uSeg[5];
+uniform vec3 uTip;
+uniform float uWeld;
+uniform vec2 uPointer;
+uniform float uRepel;
+uniform float uAspect;
+uniform float uPulse;
 attribute vec3 aEdgeA;
 attribute vec3 aEdgeB;
 attribute vec3 aRobot;
@@ -34,7 +41,17 @@ vec3 formPos(int k, out float warm, out float fade) {
   }
   if (k == 1) {
     warm = aWarm.x;
-    return aRobot;
+    int seg = int(aAnim.x + 0.5);
+    if (seg <= 1) return aRobot;
+    if (seg == 7) {
+      vec3 v = normalize(vec3(aRand.x - 0.5, aRand.y * 0.9 + 0.15, aRand.z - 0.5)) * (1.0 + 2.2 * aRand.w);
+      float age = fract(uTime * 1.7 + aRand.x * 7.0);
+      fade = uWeld * (1.0 - age) * (1.0 - age);
+      vec3 p = uTip + v * age * 0.8;
+      p.y -= 2.2 * age * age;
+      return p;
+    }
+    return (uSeg[seg - 2] * vec4(aRobot, 1.0)).xyz;
   }
   if (k == 2) {
     vec3 p = aFin;
@@ -83,9 +100,14 @@ void main() {
   pos += n * burst * 0.85;
   pos = rotY(pos, burst * 0.9 * (aRand.w - 0.5));
   pos += n * 0.012;
+  pos += normalize(pos + vec3(0.001)) * uPulse * (0.35 + 0.65 * aRand.z) * (1.0 - 0.5 * p * (1.0 - p));
   float warm = mix(wA, wB, p);
   float fade = mix(fA, fB, p);
   vec4 mv = modelViewMatrix * vec4(pos, 1.0);
+  vec4 clip = projectionMatrix * mv;
+  vec2 dd = (clip.xy / clip.w - uPointer) * vec2(uAspect, 1.0);
+  float near = exp(-dot(dd, dd) / 0.02);
+  mv.xy += normalize(dd + 1e-5) * uRepel * near * (-mv.z) * 0.045;
   gl_Position = projectionMatrix * mv;
   float sparkle = step(0.965, aRand.w);
   float size = uSize * (0.55 + 0.75 * aRand.w) * (1.0 + sparkle * 1.4);
@@ -96,7 +118,8 @@ void main() {
   float robotW = (uFrom == 1 ? 1.0 - p : 0.0) + (uTo == 1 ? p : 0.0);
   float scanY = mod(uTime * 1.3, 9.0) - 4.0;
   float scan = exp(-pow((pos.y - scanY) / 0.14, 2.0)) * robotW;
-  col += vec3(0.45, 0.75, 1.0) * scan * 1.6;
+  col += vec3(0.45, 0.75, 1.0) * scan * 0.7;
+  col += vec3(0.35, 0.6, 1.0) * near * uRepel * 0.8;
   vColor = col;
   vAlpha = (0.3 + 0.45 * aRand.x) * fade * uIntensity * (1.0 + burst * 0.25 + sparkle * 0.6);
 }

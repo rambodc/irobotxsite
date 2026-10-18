@@ -1,5 +1,5 @@
 // Drives the auto-tour: which forms are blended, morph progress and chapter timing.
-export const DURATIONS = [6.5, 7.5, 7.5, 7.5, 7.5];
+export const DURATIONS = [6.5, 10.5, 7.5, 7.5, 7.5];
 export const CHAPTERS = DURATIONS.length;
 const T_IN = 1.9,
   T_OUT = 1.5;
@@ -13,6 +13,10 @@ export class Director {
   progress = 1;
   paused = false;
   onChapter?: (chapter: number) => void;
+  // Interaction state shared with the scene.
+  orbit = { az: 0, el: 0, dragging: false, releasedAt: -1e9 };
+  pointer = { x: 0, y: 0, active: false, movedAt: -1e9 };
+  kicks = 0;
 
   update(dt: number) {
     const d = DURATIONS[this.chapter];

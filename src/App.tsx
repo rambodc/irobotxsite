@@ -9,11 +9,8 @@ import {
 import { motion, useReducedMotion } from "motion/react";
 import {
   ArrowUpRight,
-  ArrowRight,
-  ArrowDown,
   Menu,
   X,
-  Sparkles,
 } from "lucide-react";
 import {
   company,
@@ -27,6 +24,7 @@ import {
   type ImageId,
 } from "./content";
 import { api, errorMessage } from "./api";
+import HomeExperience from "./home3d/HomeExperience";
 const DemoWorkspace = lazy(() => import("./DemoWorkspace"));
 const Portal = lazy(() => import("./Portal"));
 const publicPaths = ["/", "/about", "/demo", "/contact"];
@@ -304,156 +302,6 @@ function Process() {
         ))}
       </div>
     </section>
-  );
-}
-function Disciplines() {
-  return (
-    <section className="content-section disciplines-section">
-      <Reveal className="section-heading">
-        <div>
-          <span className="eyebrow">{home.disciplines.eyebrow}</span>
-          <h2>{home.disciplines.title}</h2>
-        </div>
-        <p>{home.disciplines.text}</p>
-      </Reveal>
-      <div className="discipline-grid">
-        {industries.slice(1).map((industry) => (
-          <Reveal className="discipline-card" key={industry.id}>
-            <div className="discipline-image">
-              <Art name={industry.image} />
-              <span className="image-label">
-                {industry.name} / Concept imagery
-              </span>
-            </div>
-            <div className="discipline-copy">
-              <span className="eyebrow">
-                {industry.number} / {industry.name}
-              </span>
-              <h3>{industry.title}</h3>
-              <p>{industry.text}</p>
-              <Link to={`/about#${industry.id}`} className="text-link">
-                Explore {industry.name}
-                <ArrowUpRight size={17} />
-              </Link>
-            </div>
-          </Reveal>
-        ))}
-      </div>
-    </section>
-  );
-}
-function Home() {
-  return (
-    <>
-      <section className="oil-hero">
-        <Art name="oilfield" priority />
-        <div className="oil-hero-shade" />
-        <Mark className="hero-watermark" />
-        <div className="oil-hero-content">
-          <Reveal>
-            <span className="eyebrow">
-              <i className="signal" />
-              {home.eyebrow}
-            </span>
-            <h1>
-              AI-powered software for{" "}
-              <em>connected Oil &amp; Gas operations.</em>
-            </h1>
-            <p>{company.description}</p>
-            <div className="button-row">
-              <Button>{home.primary}</Button>
-              <Link to="/demo" className="text-link">
-                {home.secondary}
-                <ArrowRight size={17} />
-              </Link>
-            </div>
-          </Reveal>
-        </div>
-        <div className="oil-hero-bottom">
-          <div>
-            {home.strip.map((item) => (
-              <span key={item}>{item}</span>
-            ))}
-          </div>
-          <a href="#operations" aria-label="Explore connected operations">
-            <ArrowDown size={18} />
-          </a>
-        </div>
-        <span className="hero-art-note">Oil &amp; Gas / Concept imagery</span>
-      </section>
-      <section id="operations" className="content-section operations-section">
-        <Reveal className="section-heading">
-          <div>
-            <span className="eyebrow">{home.operations.eyebrow}</span>
-            <h2>{home.operations.title}</h2>
-          </div>
-          <p>{home.operations.text}</p>
-        </Reveal>
-        <Reveal className="operations-showcase">
-          <Art name="operations" />
-          <div className="concept-panel">
-            <span className="eyebrow">A shared operational workspace</span>
-            <Mark />
-            <div className="concept-connections">
-              {home.strip.map((item, i) => (
-                <div key={item}>
-                  <span>0{i + 1}</span>
-                  {item}
-                  <ArrowUpRight size={14} />
-                </div>
-              ))}
-            </div>
-            <span className="concept-disclosure">
-              Illustrative platform concept
-            </span>
-          </div>
-        </Reveal>
-        <div className="capability-grid">
-          {home.operations.points.map((item, i) => (
-            <Reveal className="capability" key={item.title}>
-              <span className="eyebrow">0{i + 1}</span>
-              <h3>{item.title}</h3>
-              <p>{item.text}</p>
-            </Reveal>
-          ))}
-        </div>
-      </section>
-      <section className="ai-band">
-        <div className="content-section split-feature">
-          <Reveal className="feature-copy">
-            <span className="eyebrow">{home.ai.eyebrow}</span>
-            <h2>{home.ai.title}</h2>
-            <p>{home.ai.text}</p>
-            <ul className="capability-list">
-              {home.ai.points.map((item) => (
-                <li key={item}>
-                  <Sparkles size={15} />
-                  {item}
-                </li>
-              ))}
-            </ul>
-            <Link to="/demo#ai-workspace" className="text-link">
-              Explore the AI concept
-              <ArrowUpRight size={17} />
-            </Link>
-          </Reveal>
-          <Reveal className="ai-visual">
-            <Art name="ai" />
-            <div className="ai-example">
-              <span className="eyebrow">
-                <Mark />
-                Your data. Your questions.
-              </span>
-              <blockquote>{home.ai.example}</blockquote>
-              <p>{home.ai.caption}</p>
-            </div>
-          </Reveal>
-        </div>
-      </section>
-      <Process />
-      <Disciplines />
-      <CTA />
-    </>
   );
 }
 function About() {
@@ -757,6 +605,18 @@ export default function App() {
         <DemoWorkspace />
       </Suspense>
     );
+  if (path === "/")
+    return (
+      <div className="x-home">
+        <a className="skip-link" href="#main">
+          Skip to content
+        </a>
+        <Header key={path} path={path} />
+        <main id="main">
+          <HomeExperience />
+        </main>
+      </div>
+    );
   return (
     <>
       <a className="skip-link" href="#main">
@@ -764,9 +624,7 @@ export default function App() {
       </a>
       <Header key={path} path={path} />
       <main id="main">
-        {path === "/" ? (
-          <Home />
-        ) : path === "/about" ? (
+        {path === "/about" ? (
           <About />
         ) : path === "/contact" ? (
           <Contact />

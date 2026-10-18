@@ -10,7 +10,7 @@ for (const viewport of [
     const errors: string[] = [];
     page.on("pageerror", (e) => errors.push(e.message));
     for (const [route, heading] of [
-      ["/", "AI-powered software"],
+      ["/", "We build the systems"],
       ["/about", "Technology that understands"],
       ["/demo", "Demo"],
       ["/contact", "Your operation."],
@@ -115,10 +115,7 @@ test("About anchors, primary call to action and brand assets work", async ({
   request,
 }) => {
   await page.goto("/");
-  await page
-    .getByRole("link", { name: "Discuss your project" })
-    .first()
-    .click();
+  await page.getByRole("link", { name: "Start a project" }).first().click();
   await expect(page).toHaveURL(/\/contact$/);
   for (const id of ["oil-gas", "robotics", "fintech"]) {
     await page.goto("/about#" + id);
@@ -142,4 +139,51 @@ test("About anchors, primary call to action and brand assets work", async ({
     expect(response.ok()).toBe(true);
     expect(response.headers()["content-type"]).toMatch(/image/);
   }
+});
+
+test("home falls back to a static page with every industry when WebGL is unavailable", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    HTMLCanvasElement.prototype.getContext = (() =>
+      null) as typeof HTMLCanvasElement.prototype.getContext;
+  });
+  await page.goto("/");
+  await expect(page.locator("h1")).toContainText("We build the systems");
+  await expect(page.locator("canvas")).toHaveCount(0);
+  for (const name of ["Humanoid Robotics", "FinTech", "Oil & Gas", "Entertainment"])
+    await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Start a project" })).toHaveAttribute("href", "/contact");
+});
+
+test.describe("immersive home", () => {
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 390, height: 844 },
+  ])
+    test(`3D tour renders and chapters can be selected at ${viewport.width}px`, async ({ page }) => {
+      const errors: string[] = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      await page.setViewportSize(viewport);
+      await page.goto("/");
+      await expect(page.locator(".x-canvas canvas")).toHaveCount(1);
+      await expect(page.locator("h1")).toContainText("We build the systems");
+      const stage = page.locator(".x-stage");
+      for (const [index, name] of ["Humanoid Robotics", "FinTech", "Oil & Gas", "Entertainment"].entries()) {
+        await page.getByRole("button", { name, exact: true }).click();
+        await expect(stage).toHaveAttribute("data-chapter", String(index + 1));
+        await expect(page.getByRole("heading", { level: 2, name })).toBeVisible();
+        await expect(page.getByRole("button", { name, exact: true })).toHaveAttribute("aria-current", "step");
+      }
+      await page.getByRole("button", { name: "iRobotX Core", exact: true }).click();
+      await expect(page.locator("h1")).toBeVisible();
+      await page.waitForTimeout(950);
+      await page.keyboard.press("ArrowDown");
+      await expect(stage).toHaveAttribute("data-chapter", "1");
+      await expect(page.getByRole("link", { name: "Start a project" })).toBeVisible();
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
+      ).toBe(true);
+      expect(errors).toEqual([]);
+    });
 });

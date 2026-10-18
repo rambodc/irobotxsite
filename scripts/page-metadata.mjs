@@ -23,11 +23,6 @@ for (const [route, page] of Object.entries(metadata)) {
       `$1${escape(value)}`,
     );
   html = html.replace(/(<link\s+rel="canonical"\s+href=")[^"]*/, `$1${url}`);
-  if (route === "/")
-    html = html.replace(
-      "</head>",
-      '<link rel="preload" as="image" type="image/avif" href="/images/oilfield-1536.avif" imagesrcset="/images/oilfield-640.avif 640w, /images/oilfield-1024.avif 1024w, /images/oilfield-1536.avif 1536w" imagesizes="100vw" fetchpriority="high"/></head>',
-    );
   writeFileSync(route === "/" ? "dist/index.html" : `dist${route}.html`, html);
 }
 for (const route of [

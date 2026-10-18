@@ -192,10 +192,46 @@ export const cta = {
   text: "Tell us about your operations and the possibilities you see. We’ll explore how to build them with you.",
   button: "Discuss your project",
 };
+export const experience = {
+  eyebrow: "iRobotX · One system, every industry",
+  headline: "We build the systems that run tomorrow’s industries.",
+  intro:
+    "iRobotX brings advanced technology and management systems to the world’s largest operators, so they spend less, make fewer errors, and grow in directions they couldn’t before.",
+  cta: "Start a project",
+  secondary: "About iRobotX",
+  outcomes: ["Lower operating cost", "Fewer errors", "New growth"],
+  chapters: [
+    {
+      id: "robotics",
+      name: "Humanoid Robotics",
+      line: "Robots that join the workforce, not just the demo.",
+      copy: "Humanoid fleets run by one control system, taking on repetitive and high-risk work to cut labour costs and human error.",
+    },
+    {
+      id: "fintech",
+      name: "FinTech",
+      line: "Every transaction, reconciled in real time.",
+      copy: "Ledger, payment and risk systems that close the books faster, remove manual errors and open new revenue lines.",
+    },
+    {
+      id: "oil-gas",
+      name: "Oil & Gas",
+      line: "From the rig floor to the reservoir, one view.",
+      copy: "Drilling, production and field crews on one platform, cutting non-productive time and costly mistakes.",
+    },
+    {
+      id: "entertainment",
+      name: "Entertainment",
+      line: "Live experiences, run at stadium scale.",
+      copy: "Ticketing, crowd and show-control systems that keep every event on cue and turn each audience into new growth.",
+    },
+  ],
+};
 export const metadata = {
   "/": {
-    title: "AI-powered Oil & Gas software | iRobotX",
-    description: company.description,
+    title: "iRobotX | Systems for Robotics, FinTech, Oil & Gas and Entertainment",
+    description:
+      "iRobotX builds advanced technology and management systems for large enterprises in humanoid robotics, FinTech, Oil & Gas and entertainment, cutting costs and errors and unlocking new growth.",
   },
   "/about": {
     title: "About our technology company | iRobotX",

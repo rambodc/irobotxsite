@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/immutability -- orbit is a mutable store read by the render loop. */
-import { Component, lazy, Suspense, useRef, useState, type ReactNode } from "react";
+import { Component, lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
 import { hasWebGL, useReducedMotion } from "./motion";
 import type { AccentVariant, OrbitState } from "./Accent";
 
@@ -23,6 +23,24 @@ export default function AccentStage({ variant, className = "" }: { variant: Acce
   const [orbit] = useState<OrbitState>(() => ({ az: 0, el: 0, dragging: false, releasedAt: -1e9 }));
   const drag = useRef<{ id: number; x: number; y: number; az: number; el: number; on: boolean; mouse: boolean } | null>(null);
   const live = webgl && !reduced;
+  // Load the 3D accent after the page has painted so it never delays the copy.
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (!live) return;
+    let idle = 0;
+    const start = () => {
+      idle = window.requestIdleCallback
+        ? window.requestIdleCallback(() => setReady(true), { timeout: 1200 })
+        : window.setTimeout(() => setReady(true), 200);
+    };
+    if (document.readyState === "complete") start();
+    else window.addEventListener("load", start, { once: true });
+    return () => {
+      window.removeEventListener("load", start);
+      if (window.cancelIdleCallback) window.cancelIdleCallback(idle);
+      else window.clearTimeout(idle);
+    };
+  }, [live]);
   return (
     <div
       className={`accent accent-${variant} ${live ? "is-live" : "is-static"} ${className}`}
@@ -63,7 +81,7 @@ export default function AccentStage({ variant, className = "" }: { variant: Acce
         drag.current = null;
       }}
     >
-      {live && (
+      {live && ready && (
         <Boundary>
           <Suspense fallback={null}>
             <Accent variant={variant} count={count} orbit={orbit} />

@@ -230,7 +230,11 @@ function Experience({ onFail }: { onFail: () => void }) {
         hold("touch", false);
       }}
     >
-      <div className="x-canvas">
+      <div
+        className="x-canvas"
+        role="img"
+        aria-label="Interactive 3D particle tour of iRobotX industries: a core lattice, an industrial robot arm welding, a ledger city, an oil rig and an arena stage"
+      >
         <SceneBoundary onError={onFail}>
           <Suspense fallback={null}>
             <Scene director={director} stage={stage} {...device} />

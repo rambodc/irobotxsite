@@ -481,9 +481,9 @@
     animation-delay: 0.15s;
   }
 }
+/* Transform only, so the hero copy counts as painted immediately. */
 @keyframes s-rise {
   from {
-    opacity: 0;
     transform: translateY(18px);
   }
 }

@@ -85,12 +85,14 @@ test("header has no sign-in or project button; contact page links to client sign
   await expect(page).toHaveURL(/\/signin$/);
   await expect(page.getByRole("textbox", { name: "Email address" })).toBeVisible();
 });
-test("the demo page is gone", async ({ page, request }) => {
+test("the demo page is gone", async ({ page }) => {
   await page.goto("/demo");
   await expect(page.locator("h1")).not.toHaveText("Demo");
   await expect(page.getByRole("navigation", { name: "Employee apps" })).toHaveCount(0);
-  const sitemap = await (await request.get("/sitemap.xml")).text();
+  if (!existsSync("dist/sitemap.xml")) return;
+  const sitemap = readFileSync("dist/sitemap.xml", "utf8");
   expect(sitemap).not.toContain("/demo");
+  expect(sitemap).toContain("<lastmod>");
   expect(sitemap).toContain("/about");
   expect(sitemap).toContain("/contact");
 });
@@ -112,15 +114,34 @@ for (const [route, title, h1] of [
         await expect(page.getByRole("heading", { level: 2, name, exact: true })).toBeVisible();
   });
 }
-test("built pages carry Organization structured data", async () => {
+test("built pages ship complete SEO in static HTML", async () => {
   test.skip(!existsSync("dist/about.html"), "run `npm run build` first");
-  for (const route of ["/about", "/contact"]) {
-    const html = readFileSync(`dist${route}.html`, "utf8");
-    const match = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/);
-    expect(match, route).not.toBeNull();
-    const data = JSON.parse(match![1]);
-    const types = (data["@graph"] ?? [data]).map((n: { "@type": string }) => n["@type"]);
+  const titles = new Set<string>();
+  for (const [route, file] of [["/", "index"], ["/about", "about"], ["/contact", "contact"]]) {
+    const html = readFileSync(`dist/${file}.html`, "utf8");
+    const one = (re: RegExp) => html.match(re)?.[1];
+    const title = one(/<title>([^<]+)<\/title>/);
+    expect(title, route).toBeTruthy();
+    titles.add(title!);
+    expect(one(/<meta\s+name="description"\s+content="([^"]+)"/), route).toBeTruthy();
+    expect(one(/<link\s+rel="canonical"\s+href="([^"]+)"/)).toBe(`https://irobotx.io${route}`);
+    expect(one(/<meta\s+property="og:url"\s+content="([^"]+)"/)).toBe(`https://irobotx.io${route}`);
+    expect(one(/<meta\s+property="og:image"\s+content="([^"]+)"/)).toBe("https://irobotx.io/og.png");
+    expect(one(/<meta\s+property="og:image:width"\s+content="([^"]+)"/)).toBe("1200");
+    expect(one(/<meta\s+name="twitter:card"\s+content="([^"]+)"/)).toBe("summary_large_image");
+    expect(html.match(/<h1[\s>]/g)?.length, route).toBe(1);
+    expect((html.match(/<h2[\s>]/g)?.length ?? 0) >= 1, route).toBe(true);
+    const data = JSON.parse(one(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/)!);
+    const types = data["@graph"].map((n: { "@type": string }) => n["@type"]);
     expect(types).toContain("Organization");
+    expect(types).toContain(route === "/about" ? "AboutPage" : route === "/contact" ? "ContactPage" : "WebPage");
+    if (route === "/") expect(types).toContain("WebSite");
+  }
+  expect(titles.size).toBe(3);
+  for (const file of ["signin", "portal", "portal/admin", "auth/action"]) {
+    const html = readFileSync(`dist/${file}.html`, "utf8");
+    expect(html).toContain('name="robots" content="noindex');
+    expect(html).not.toContain('rel="canonical"');
   }
 });
 test("invalid invitation and contact validation are usable", async ({

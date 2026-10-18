@@ -56,7 +56,7 @@ const nearestStation = (leg: SurveyLeg, md: number) =>
   );
 
 export default function WellViewer({ onBack }: { onBack: () => void }) {
-  const survey: WellModel = useMemo(sampleWell, []);
+  const survey: WellModel = useMemo(() => sampleWell(), []);
   const busyRef = useRef(false);
   const [selectedLegId, setSelectedLegId] = useState("main"),
     [selectedSectionId, setSelectedSectionId] = useState<string | null>(null),

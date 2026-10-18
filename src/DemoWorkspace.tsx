@@ -9,7 +9,6 @@ import {
 import {
   ArrowLeft,
   ArrowUpRight,
-  Building2,
   Camera,
   Check,
   ChevronRight,
@@ -23,8 +22,6 @@ import {
   RotateCcw,
   Search,
   ShieldCheck,
-  UserRound,
-  UsersRound,
   Waves,
   X,
 } from "lucide-react";

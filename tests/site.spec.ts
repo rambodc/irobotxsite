@@ -12,7 +12,7 @@ for (const viewport of [
     for (const [route, heading] of [
       ["/", "AI-powered software"],
       ["/about", "Technology that understands"],
-      ["/demo", "See what we could build"],
+      ["/demo", "Demo"],
       ["/contact", "Your operation."],
     ]) {
       await page.goto(route);
@@ -72,17 +72,26 @@ test("reduced motion and unavailable WebGL preserve content", async ({
       null) as typeof HTMLCanvasElement.prototype.getContext;
   });
   await page.goto("/demo");
-  await expect(
-    page.getByRole("region", { name: "Oil & Gas visual concepts" }),
-  ).toBeVisible();
-  await expect(page.locator(".concept-card")).toHaveCount(3);
-  await expect(page.getByText("Coming soon", { exact: true })).toHaveCount(2);
+  await expect(page.locator("h1")).toHaveText("Demo");
+  const launcher = page.getByRole("navigation", { name: "Employee apps" });
+  await expect(launcher).toBeVisible();
+  for (const app of ["Profile", "Company", "Employees", "AI Chat", "Well Viewer"])
+    await expect(launcher.getByRole("button", { name: app })).toBeVisible();
   await expect(page.locator("canvas")).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: /motion|rotate/i }),
   ).toHaveCount(0);
-  await expect(page.getByText(/These are illustrative concepts/)).toBeVisible();
-  await expect(page.locator("h1")).toBeVisible();
+  await launcher.getByRole("button", { name: "Well Viewer" }).click();
+  await expect(page.locator(".well-fallback")).toContainText(
+    "3D is unavailable in this browser.",
+  );
+  await expect(
+    page.getByRole("img", {
+      name: "Illustrative main bore with three horizontal lateral legs",
+    }),
+  ).toBeVisible();
+  await expect(page.getByText("PulseCrest · Horizon 01")).toBeVisible();
+  await expect(page.locator("canvas")).toHaveCount(0);
 });
 test("invalid invitation and contact validation are usable", async ({
   page,

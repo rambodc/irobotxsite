@@ -27,14 +27,14 @@ export function fixtureSnapshot(empty = false): Snapshot {
         {
           id: "a1b2c3d4e5f6a1b2c3d4e5f6", status: "posted", recipeId: "ci100-standard", recipeName: "CI-100 standard blend", outputItemId: "43", outputName: "CI-100 Corrosion Inhibitor",
           outputQty: 1000, lotNumber: "FGCI10-261019-01", note: "", plan: null,
-          result: { actualCost: 928, unitCost: 0.928, valueIn: 928, residual: 0, wipBefore: 0, wipAfter: 0, qtyAfter: {} },
-          qbo: { consumeAdjustmentId: "201", produceAdjustmentId: "202" }, error: null, createdAt: minutesAgo(45), postedAt: minutesAgo(45),
+          result: { actualCost: 928, unitCost: 0.928, billAmount: 928, billTotal: 0, residual: 0, wipBefore: 0, wipAfter: 0, runDate: minutesAgo(45).slice(0, 10), qtyAfter: {} },
+          qbo: { consumeAdjustmentId: "201", billId: "202", billDocNumber: "PR-FGCI10-261019-01" }, error: null, createdAt: minutesAgo(45), postedAt: minutesAgo(45),
         },
       ];
   return {
     syncedAt: minutesAgo(2),
     connection: { connected: true, env: "sandbox", realmId: "9341458521176413", companyName: "Uniquem (sandbox)" },
-    settings: { wip: { id: "1150040000", name: "Production WIP" }, inventoryAsset: { id: "85", name: "Inventory Asset" }, income: { id: "67", name: "Sales of Product Income" }, cogs: { id: "84", name: "Cost of Goods Sold" }, residual: { id: "85", name: "Inventory Asset" } },
+    settings: { wip: { id: "1150040000", name: "Production WIP" }, inventoryAsset: { id: "85", name: "Inventory Asset" }, income: { id: "67", name: "Sales of Product Income" }, cogs: { id: "84", name: "Cost of Goods Sold" }, residual: { id: "85", name: "Inventory Asset" }, vendor: { id: "67", name: "Uniquem Production (internal)" }, taxCode: { id: "6", name: "Out of Scope" }, wipBalance: 0 },
     oauthRedirectUri: "https://us-central1-irobotxsite.cloudfunctions.net/qbChemOAuthCallback",
     items, recipes, runs,
   };
@@ -83,15 +83,15 @@ export function createFixtureClient({ empty = false } = {}): QbChemClient {
     },
     deleteRecipe: async (id) => ((state.recipes = state.recipes.filter((r) => r.id !== id)), wait({ deleted: id })),
     previewRun: (recipeId, outputQty) => wait({ plan: plan(recipeId, outputQty) }),
-    postRun: async ({ recipeId, outputQty, lotNumber, note, requestId }) => {
+    postRun: async ({ recipeId, outputQty, lotNumber, note, runDate, requestId }) => {
       const p = plan(recipeId, outputQty);
       const r = state.recipes.find((x) => x.id === recipeId)!;
       for (const l of p.lines) find(l.itemId)!.qtyOnHand = l.after;
       find(p.outputItemId)!.qtyOnHand += outputQty;
       const run: Run = {
         id: requestId.replace(/-/g, "").slice(0, 24), status: "posted", recipeId, recipeName: r.name, outputItemId: p.outputItemId, outputName: p.outputName, outputQty, lotNumber, note, plan: p,
-        result: { actualCost: p.estTotal, unitCost: p.estUnitCost, valueIn: p.estTotal, residual: 0, wipBefore: 0, wipAfter: 0, qtyAfter: {} },
-        qbo: { consumeAdjustmentId: "203", produceAdjustmentId: "204" }, error: null, createdAt: new Date().toISOString(), postedAt: new Date().toISOString(),
+        result: { actualCost: p.estTotal, unitCost: p.estUnitCost, billAmount: p.estTotal, billTotal: 0, residual: 0, wipBefore: 0, wipAfter: 0, runDate: runDate ?? new Date().toISOString().slice(0, 10), qtyAfter: {} },
+        qbo: { consumeAdjustmentId: "203", billId: "204", billDocNumber: lotNumber ? `PR-${lotNumber}` : "PR-RUN" }, error: null, createdAt: new Date().toISOString(), postedAt: new Date().toISOString(),
       };
       state.runs.unshift(run);
       return wait({ run }, 700);

@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createInput, updateInput, setupInput, recipeInput, runInput, InputError } from "../qbchem/policy.js";
 import { toItem, mergeCatalog, findDuplicates, similarity } from "../qbchem/catalog.js";
-import { scaleRecipe, planRun, settleRun, residualJournalLines, unitCost, money } from "../qbchem/costing.js";
+import { scaleRecipe, planRun, settleRun, residualJournalLines, productionBillLines, productionDocNumber, unitCost, money } from "../qbchem/costing.js";
 import { createQbo, QboError, isStale, isDuplicateName, publicConnection } from "../qbchem/qbo.js";
 import { ACTIONS } from "../qbchem/service.js";
 
@@ -105,12 +105,12 @@ test("recipe scaling and run plan use live QuickBooks quantities and costs", () 
 });
 
 test("settlement reads actual cost from WIP and computes the rounding residual", () => {
-  const s = settleRun({ wipBefore: 0, wipAfterConsume: 1170, wipAfterProduce: 0, outputQty: 1000 });
-  assert.deepEqual(s, { actualCost: 1170, unitCost: 1.17, valueIn: 1170, residual: 0 });
-  const odd = settleRun({ wipBefore: 10, wipAfterConsume: 110, wipAfterProduce: 10.03, outputQty: 3 });
+  const s = settleRun({ wipBefore: 0, wipAfterConsume: 1170, wipAfterBill: 0, outputQty: 1000 });
+  assert.deepEqual(s, { actualCost: 1170, unitCost: 1.17, residual: 0 });
+  const odd = settleRun({ wipBefore: 10, wipAfterConsume: 110, wipAfterBill: 10.03, outputQty: 3 });
   assert.equal(odd.unitCost, 33.3333);
   assert.equal(odd.residual, 0.03);
-  assert.equal(odd.valueIn, 99.97);
+  assert.deepEqual(settleRun({ wipBefore: 0, wipAfterConsume: 538.5, outputQty: 500 }), { actualCost: 538.5, unitCost: 1.077 });
   assert.equal(unitCost(1 / 3), 0.3333);
   assert.equal(money(1.005), 1.01);
 });
@@ -165,4 +165,39 @@ test("public connection never exposes tokens and the action list is fixed", () =
 test("similarity flags names whose words are all contained in another name", () => {
   assert.ok(similarity("Surfactant Base", "UX Surfactant Blend Base (deleted)") >= 0.75);
   assert.ok(similarity("Caustic Soda", "Citric Acid") < 0.75);
+});
+
+test("production bill is $0: finished item at exact batch cost, equal negative WIP line", () => {
+  const lines = productionBillLines({ itemId: "35", outputQty: 3, actualCost: 100, wipAccountId: "W", taxCodeId: "6", description: "run" });
+  assert.equal(lines.length, 2);
+  const [item, wip] = lines;
+  assert.equal(item.DetailType, "ItemBasedExpenseLineDetail");
+  assert.equal(item.Amount, 100);
+  assert.equal(item.ItemBasedExpenseLineDetail.Qty, 3);
+  assert.equal(item.ItemBasedExpenseLineDetail.UnitPrice, 33.333333);
+  assert.deepEqual(item.ItemBasedExpenseLineDetail.TaxCodeRef, { value: "6" });
+  assert.equal(wip.DetailType, "AccountBasedExpenseLineDetail");
+  assert.equal(wip.Amount, -100);
+  assert.deepEqual(wip.AccountBasedExpenseLineDetail.AccountRef, { value: "W" });
+  assert.equal(money(item.Amount + wip.Amount), 0);
+  const noTax = productionBillLines({ itemId: "35", outputQty: 1, actualCost: 1.234, wipAccountId: "W", taxCodeId: "", description: "r" });
+  assert.equal(noTax[0].Amount, 1.23);
+  assert.equal("TaxCodeRef" in noTax[0].ItemBasedExpenseLineDetail, false);
+  assert.throws(() => productionBillLines({ itemId: "35", outputQty: 1, actualCost: -1, wipAccountId: "W", description: "r" }), /negative/);
+});
+
+test("production bill DocNumber uses the lot when it fits QuickBooks' 21 characters", () => {
+  assert.equal(productionDocNumber("CI100-261019-01", "abcdef1234567890"), "PR-CI100-261019-01");
+  assert.equal(productionDocNumber("LOT A", "abcdef1234567890"), "PR-LOT-A");
+  assert.equal(productionDocNumber("", "abcdef1234567890"), "PR-ABCDEF123456");
+  assert.equal(productionDocNumber("X".repeat(30), "abcdef1234567890"), "PR-ABCDEF123456");
+});
+
+test("production date is optional, not in the future, at most a year back", () => {
+  const base = { recipeId: "r1", outputQty: 10, requestId: "11111111-2222-4333-8444-555555555555" };
+  assert.equal(runInput(base, { today: "2026-10-19" }).runDate, null);
+  assert.equal(runInput({ ...base, runDate: "2026-10-01" }, { today: "2026-10-19" }).runDate, "2026-10-01");
+  assert.throws(() => runInput({ ...base, runDate: "2026-10-20" }, { today: "2026-10-19" }), /future/);
+  assert.throws(() => runInput({ ...base, runDate: "2025-01-01" }, { today: "2026-10-19" }), /one year/);
+  assert.throws(() => runInput({ ...base, runDate: "19/10/2026" }, { today: "2026-10-19" }), /YYYY-MM-DD/);
 });

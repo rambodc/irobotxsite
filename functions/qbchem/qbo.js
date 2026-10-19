@@ -21,6 +21,7 @@ export class QboError extends Error {
 }
 export const isStale = (e) => e instanceof QboError && e.qboCode === "5010";
 export const isDuplicateName = (e) => e instanceof QboError && e.qboCode === "6240";
+export const isDuplicateDocNumber = (e) => e instanceof QboError && e.qboCode === "6140";
 
 export function authorizeUrl({ clientId, redirectUri, state }) {
   return `${AUTH_URL}?${new URLSearchParams({
@@ -123,6 +124,11 @@ export function createQbo({ db, clientId, clientSecret, fetchImpl = fetch }) {
     accounts: async () => (await query("select * from Account maxresults 1000")).Account || [],
     createAccount: async (body) => (await request("POST", "account", body)).Account,
     createAdjustment: async (body) => (await request("POST", "inventoryadjustment", body)).InventoryAdjustment,
+    createBill: async (body) => (await request("POST", "bill", body)).Bill,
+    vendorByName: async (name) =>
+      ((await query(`select * from Vendor where DisplayName = '${name.replace(/'/g, "\\'")}'`)).Vendor || [])[0] || null,
+    createVendor: async (body) => (await request("POST", "vendor", body)).Vendor,
+    taxCodes: async () => (await query("select * from TaxCode")).TaxCode || [],
     createJournal: async (body) => (await request("POST", "journalentry", body)).JournalEntry,
     companyInfo: async (realmId) => (await request("GET", `companyinfo/${realmId}`)).CompanyInfo,
   };

@@ -51,5 +51,6 @@ describe("QB Chem app", () => {
     fireEvent.click(screen.getByRole("button", { name: /Confirm & post/ }));
     expect(await screen.findByText("Posted to QuickBooks", undefined, T)).toBeTruthy();
     expect(screen.getAllByText("Adj #203 consume").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Bill #204 PR-RUN").length).toBeGreaterThan(0);
   });
 });

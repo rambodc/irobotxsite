@@ -12,6 +12,7 @@ export function toItem(i) {
     purchaseCost: Number(i.PurchaseCost ?? 0),
     unitPrice: Number(i.UnitPrice ?? 0),
     syncToken: String(i.SyncToken),
+    startDate: i.InvStartDate || null,
     updatedAt: i.MetaData?.LastUpdatedTime || null,
   };
 }

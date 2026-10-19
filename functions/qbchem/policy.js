@@ -115,7 +115,13 @@ export function recipeInput(d = {}) {
   return out;
 }
 
-export function runInput(d = {}) {
+export function runInput(d = {}, { today = null } = {}) {
+  const runDate = date(d.runDate, "Production date");
+  if (runDate && today) {
+    if (runDate > today) bad("Production date can't be in the future.");
+    const yearAgo = new Date(Date.parse(today) - 366 * 864e5).toISOString().slice(0, 10);
+    if (runDate < yearAgo) bad("Production date can be at most one year back.");
+  }
   if (typeof d.requestId !== "string" || !UUID.test(d.requestId)) bad("Request id is invalid.");
   const lot = str(d.lotNumber, "Lot number", 40, { required: false });
   if (lot && !/^[A-Za-z0-9 ._/-]+$/.test(lot))
@@ -125,6 +131,7 @@ export function runInput(d = {}) {
     outputQty: amount(d.outputQty, "Quantity to produce", { min: 0, gt: true, max: 1e7 }),
     lotNumber: lot,
     note: str(d.note, "Note", 500, { required: false }),
+    runDate,
     requestId: d.requestId,
   };
 }

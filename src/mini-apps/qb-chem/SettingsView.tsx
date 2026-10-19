@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { Check, Copy, Link2, ShieldCheck } from "lucide-react";
 import type { ViewProps } from "./QbChemApp";
-import type { Snapshot } from "./types";
-import { friendlyError } from "./format";
+import { fmtMoney, friendlyError } from "./format";
 import { Badge, Notice } from "./ui";
 
 export default function SettingsView({ client, data, patch }: ViewProps) {
@@ -25,12 +24,14 @@ export default function SettingsView({ client, data, patch }: ViewProps) {
       setBusy(false);
     }
   }
-  const rows: [string, string, keyof NonNullable<Snapshot["settings"]>][] = [
+  const rows: [string, string, "wip" | "inventoryAsset" | "income" | "cogs" | "residual" | "vendor" | "taxCode"][] = [
     ["Production WIP", "Clearing account each run passes through; nets to $0.", "wip"],
     ["Inventory asset", "Where raw and finished stock value sits.", "inventoryAsset"],
     ["Product income", "Used for new items’ sales.", "income"],
     ["Cost of goods sold", "Used for new items’ cost of sales.", "cogs"],
-    ["Rounding", "Receives cents left in WIP after a run.", "residual"],
+    ["Production vendor", "Internal vendor on the $0 production bills. Never paid.", "vendor"],
+    ["Production tax code", "Keeps the internal bills out of GST/HST.", "taxCode"],
+    ["Rounding", "Receives any cents left in WIP after a run (normally none).", "residual"],
   ];
 
   return (
@@ -91,6 +92,13 @@ export default function SettingsView({ client, data, patch }: ViewProps) {
             <p className="qc-muted">Not set up yet.</p>
           ) : (
             <dl className="qc-accounts">
+              <div>
+                <dt>
+                  Production WIP balance
+                  <small>Should be $0.00 between runs.</small>
+                </dt>
+                <dd>{s.wipBalance === null ? "—" : Math.abs(s.wipBalance) < 0.005 ? <Badge tone="ok">{fmtMoney(0)}</Badge> : <Badge tone="warn">{fmtMoney(s.wipBalance)}</Badge>}</dd>
+              </div>
               {rows.map(([label, help, key]) => (
                 <div key={key}>
                   <dt>
@@ -121,8 +129,8 @@ export default function SettingsView({ client, data, patch }: ViewProps) {
           <h3 className="qc-card-title">How a production run is posted</h3>
           <ol className="qc-steps">
             <li><strong>Consume.</strong> One inventory adjustment takes the recipe inputs out of stock. QuickBooks values them at its own FIFO cost and moves that value into Production WIP.</li>
-            <li><strong>Cost.</strong> QB Chem reads the WIP increase: that is the true cost of the batch. The finished product’s purchase cost is set to cost ÷ quantity.</li>
-            <li><strong>Produce.</strong> A second adjustment adds the finished product to stock, moving the value back out of WIP.</li>
+            <li><strong>Cost.</strong> QB Chem reads the WIP increase: that is the true cost of the batch.</li>
+            <li><strong>Produce.</strong> A $0 bill from the internal production vendor adds the finished product at exactly that cost, with an equal negative line that empties WIP. Nothing is owed and no tax applies.</li>
             <li><strong>Clear.</strong> If any cents remain in WIP, a small journal entry clears them, so WIP always ends at $0.</li>
           </ol>
         </div>

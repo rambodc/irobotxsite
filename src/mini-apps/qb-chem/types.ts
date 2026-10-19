@@ -19,6 +19,7 @@ export interface Item {
   purchaseCost: number;
   unitPrice: number;
   syncToken: string;
+  startDate?: string | null;
   updatedAt: string | null;
   setup: Setup | null;
   status: "ready" | "needs-setup";
@@ -82,13 +83,15 @@ export interface Run {
   result: {
     actualCost: number;
     unitCost: number;
-    valueIn: number;
+    billAmount: number;
+    billTotal: number;
     residual: number;
     wipBefore: number;
     wipAfter: number;
+    runDate: string;
     qtyAfter: Record<string, number>;
   } | null;
-  qbo: { consumeAdjustmentId?: string; produceAdjustmentId?: string; journalEntryId?: string };
+  qbo: { consumeAdjustmentId?: string; billId?: string; billDocNumber?: string; journalEntryId?: string };
   error: string | null;
   createdAt: string | null;
   postedAt: string | null;
@@ -100,7 +103,16 @@ export interface Account {
 export interface Snapshot {
   syncedAt: string;
   connection: { connected: boolean; env: string | null; realmId: string | null; companyName: string | null };
-  settings: { wip: Account | null; inventoryAsset: Account | null; income: Account | null; cogs: Account | null; residual: Account | null } | null;
+  settings: {
+    wip: Account | null;
+    inventoryAsset: Account | null;
+    income: Account | null;
+    cogs: Account | null;
+    residual: Account | null;
+    vendor: Account | null;
+    taxCode: Account | null;
+    wipBalance: number | null;
+  } | null;
   oauthRedirectUri: string;
   items: Item[];
   recipes: Recipe[];
@@ -126,7 +138,7 @@ export interface QbChemClient {
   saveRecipe(recipe: Omit<Recipe, "id" | "updatedAt"> & { id?: string }): Promise<{ recipe: Recipe }>;
   deleteRecipe(id: string): Promise<{ deleted: string }>;
   previewRun(recipeId: string, outputQty: number): Promise<{ plan: Plan }>;
-  postRun(input: { recipeId: string; outputQty: number; lotNumber: string; note: string; requestId: string }): Promise<{ run: Run; repeated?: boolean }>;
+  postRun(input: { recipeId: string; outputQty: number; lotNumber: string; note: string; runDate: string | null; requestId: string }): Promise<{ run: Run; repeated?: boolean }>;
   ensureSetup(): Promise<{ settings: Snapshot["settings"] }>;
   connectStart(): Promise<{ url: string; redirectUri: string }>;
 }

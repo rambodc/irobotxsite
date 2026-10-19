@@ -7,13 +7,16 @@ import { defineSecret } from "firebase-functions/params";
 import { createHash, randomBytes } from "node:crypto";
 import { createInput, updateInput, setupInput, recipeInput, runInput, qboId, docId, InputError } from "./policy.js";
 import { toItem, mergeCatalog, findDuplicates } from "./catalog.js";
-import { planRun, settleRun, residualJournalLines } from "./costing.js";
-import { createQbo, QboError, isStale, isDuplicateName, authorizeUrl, exchangeCode, publicConnection, CONNECTION_DOC } from "./qbo.js";
+import { planRun, settleRun, residualJournalLines, productionBillLines, productionDocNumber } from "./costing.js";
+import { createQbo, QboError, isStale, isDuplicateName, isDuplicateDocNumber, authorizeUrl, exchangeCode, publicConnection, CONNECTION_DOC } from "./qbo.js";
 
 const clientIdSecret = defineSecret("QBO_CLIENT_ID");
 const clientSecretSecret = defineSecret("QBO_CLIENT_SECRET");
 export const OAUTH_REDIRECT_URI = "https://us-central1-irobotxsite.cloudfunctions.net/qbChemOAuthCallback";
 const TIME_ZONE = "America/Edmonton";
+export const PRODUCTION_VENDOR = "Uniquem Production (internal)";
+// Preferred purchase tax codes for the internal $0 bill, most suitable first (QuickBooks Canada names).
+const TAX_CODE_PREFERENCE = ["Out of Scope", "Exempt", "Zero-rated"];
 
 const db = () => getFirestore();
 const setupCol = () => db().collection("qbChemItems");
@@ -64,7 +67,8 @@ async function catalogItem(q, id) {
 
 async function ensureSettings(q) {
   const cur = (await settingsRef().get()).data() || {};
-  if (cur.wipAccountId && cur.inventoryAssetId && cur.incomeAccountId && cur.cogsAccountId && cur.residualAccountId) return cur;
+  if (cur.wipAccountId && cur.inventoryAssetId && cur.incomeAccountId && cur.cogsAccountId && cur.residualAccountId && cur.vendorId && "taxCodeId" in cur)
+    return cur;
   const accounts = await q.accounts();
   const pick = (f) => accounts.find((a) => a.Active !== false && f(a));
   const inventory = pick((a) => a.AccountSubType === "Inventory");
@@ -75,7 +79,22 @@ async function ensureSettings(q) {
   if (!wip) wip = await q.createAccount({ Name: "Production WIP", AccountType: "Other Current Asset", AccountSubType: "OtherCurrentAssets" });
   if (!inventory || !income || !cogs)
     throw new HttpsError("failed-precondition", "QuickBooks needs an Inventory Asset, a product income and a Cost of Goods Sold account.");
+  let vendor = cur.vendorId ? { Id: cur.vendorId } : await q.vendorByName(PRODUCTION_VENDOR);
+  if (!vendor)
+    vendor = await q.createVendor({
+      DisplayName: PRODUCTION_VENDOR,
+      CompanyName: "Uniquem",
+      Notes: "Internal vendor used by QB Chem for $0 production bills. Never pay or edit these bills.",
+    });
+  let taxCodeId = cur.taxCodeId ?? null;
+  if (!("taxCodeId" in cur)) {
+    const codes = (await q.taxCodes()).filter((c) => c.Active !== false);
+    const code = TAX_CODE_PREFERENCE.map((n) => codes.find((c) => c.Name === n)).find(Boolean);
+    taxCodeId = code ? String(code.Id) : "";
+  }
   const next = {
+    vendorId: String(vendor.Id),
+    taxCodeId,
     wipAccountId: String(wip.Id),
     inventoryAssetId: String(inventory.Id),
     incomeAccountId: String(income.Id),
@@ -97,7 +116,18 @@ async function publicSettings(q) {
     /* names are cosmetic */
   }
   const acct = (id) => (id ? { id, name: names[id] || `Account ${id}` } : null);
+  let wipBalance = null;
+  let taxCode = null;
+  try {
+    if (s.wipAccountId) wipBalance = Number((await q.getAccount(s.wipAccountId)).CurrentBalance || 0);
+    if (s.taxCodeId) taxCode = { id: s.taxCodeId, name: (await q.taxCodes()).find((c) => String(c.Id) === s.taxCodeId)?.Name || `Tax code ${s.taxCodeId}` };
+  } catch {
+    /* informational */
+  }
   return {
+    vendor: s.vendorId ? { id: s.vendorId, name: PRODUCTION_VENDOR } : null,
+    taxCode,
+    wipBalance,
     wip: acct(s.wipAccountId),
     inventoryAsset: acct(s.inventoryAssetId),
     income: acct(s.incomeAccountId),
@@ -274,13 +304,13 @@ export function createActions(q, account) {
 
     async previewRun(d) {
       const recipe = await readRecipe(d.recipeId);
-      const outputQty = runInput({ ...d, requestId: "00000000-0000-0000-0000-000000000000" }).outputQty;
+      const outputQty = runInput({ ...d, runDate: null, requestId: "00000000-0000-0000-0000-000000000000" }).outputQty;
       const byId = Object.fromEntries((await catalog(q)).map((i) => [i.id, i]));
       return { plan: planRun(recipe, outputQty, byId), recipe };
     },
 
     async postRun(d) {
-      const input = runInput(d);
+      const input = runInput(d, { today: today() });
       const id = createHash("sha256").update(`run:${input.requestId}`).digest("hex").slice(0, 24);
       const ref = runCol().doc(id);
       const prior = await ref.get();
@@ -290,6 +320,16 @@ export function createActions(q, account) {
       const byId = Object.fromEntries(items.map((i) => [i.id, i]));
       const plan = planRun(recipe, input.outputQty, byId);
       if (!plan.ok) throw new HttpsError("failed-precondition", plan.problems.join(" "));
+      if (input.runDate) {
+        const early = [recipe.outputItemId, ...plan.lines.map((l) => l.itemId)]
+          .map((i) => byId[i])
+          .filter((i) => i?.startDate && input.runDate < i.startDate);
+        if (early.length)
+          throw new HttpsError(
+            "failed-precondition",
+            `Production date is before the QuickBooks inventory start date of ${early.map((i) => `${i.name} (${i.startDate})`).join(", ")}.`,
+          );
+      }
       const s = await ensureSettings(q);
       await acquireLock(account.uid);
       try {
@@ -311,7 +351,7 @@ export function createActions(q, account) {
         } catch {
           return { run: serializeRun(id, (await ref.get()).data()), repeated: true };
         }
-        const date = today();
+        const date = input.runDate || today();
         const tag = `QB Chem run ${id.slice(0, 8)} · ${recipe.name}${input.lotNumber ? ` · lot ${input.lotNumber}` : ""}`;
         const doc = (suffix) => `QC${id.slice(0, 6).toUpperCase()}-${suffix}`;
         const wipBalance = async () => Number((await q.getAccount(s.wipAccountId)).CurrentBalance || 0);
@@ -332,20 +372,34 @@ export function createActions(q, account) {
           await ref.update({ qbo: qboIds });
           const consumed = settleRun({ wipBefore, wipAfterConsume: await wipBalance(), outputQty: plan.outputQty });
 
-          const fg = await q.getItem(recipe.outputItemId);
-          await q.saveItem({ Id: fg.Id, SyncToken: fg.SyncToken, sparse: true, PurchaseCost: consumed.unitCost });
-          const produce = await q.createAdjustment({
-            DocNumber: doc("P"),
+          // Finished goods arrive on a $0 internal bill at the exact batch cost; the negative line clears WIP.
+          const bill = {
+            VendorRef: { value: s.vendorId },
             TxnDate: date,
-            AdjustAccountRef: { value: s.wipAccountId },
-            PrivateNote: `${tag} · produce finished product at ${consumed.unitCost}/unit`,
-            Line: [{ DetailType: "ItemAdjustmentLineDetail", ItemAdjustmentLineDetail: { ItemRef: { value: recipe.outputItemId }, QtyDiff: plan.outputQty } }],
-          });
-          qboIds.produceAdjustmentId = String(produce.Id);
+            DocNumber: productionDocNumber(input.lotNumber, id),
+            PrivateNote: `${tag} · run id ${id}${input.note ? ` · ${input.note}` : ""}`,
+            ...(s.taxCodeId ? { GlobalTaxCalculation: "TaxExcluded" } : {}),
+            Line: productionBillLines({
+              itemId: recipe.outputItemId,
+              outputQty: plan.outputQty,
+              actualCost: consumed.actualCost,
+              wipAccountId: s.wipAccountId,
+              taxCodeId: s.taxCodeId,
+              description: `Production run ${id.slice(0, 8)}${input.lotNumber ? ` · lot ${input.lotNumber}` : ""} · ${plan.outputName}`,
+            }),
+          };
+          let produced;
+          try {
+            produced = await q.createBill(bill);
+          } catch (e) {
+            if (!isDuplicateDocNumber(e)) throw e;
+            produced = await q.createBill({ ...bill, DocNumber: productionDocNumber("", id) });
+          }
+          qboIds.billId = String(produced.Id);
+          qboIds.billDocNumber = produced.DocNumber || "";
           await ref.update({ qbo: qboIds });
 
-          const wipAfterConsume = wipBefore + consumed.actualCost;
-          const settled = settleRun({ wipBefore, wipAfterConsume, wipAfterProduce: await wipBalance(), outputQty: plan.outputQty });
+          const settled = settleRun({ wipBefore, wipAfterConsume: wipBefore + consumed.actualCost, wipAfterBill: await wipBalance(), outputQty: plan.outputQty });
           const jeLines = residualJournalLines(settled.residual, s.wipAccountId, s.residualAccountId, `${tag} · clear WIP rounding`);
           if (jeLines.length) {
             const je = await q.createJournal({ DocNumber: doc("R"), TxnDate: date, PrivateNote: `${tag} · clear WIP rounding`, Line: jeLines });
@@ -356,8 +410,10 @@ export function createActions(q, account) {
           const result = {
             actualCost: settled.actualCost,
             unitCost: settled.unitCost,
-            valueIn: settled.valueIn,
+            billAmount: Number(produced.Line?.[0]?.Amount ?? consumed.actualCost),
+            billTotal: Number(produced.TotalAmt ?? 0),
             residual: settled.residual,
+            runDate: date,
             wipBefore,
             wipAfter,
             qtyAfter: Object.fromEntries(after.map((i) => [String(i.Id), Number(i.QtyOnHand ?? 0)])),
@@ -366,7 +422,12 @@ export function createActions(q, account) {
           await log("post-run", true, { runId: id, ...qboIds, actualCost: result.actualCost });
           return { run: serializeRun(id, (await ref.get()).data()) };
         } catch (e) {
-          const message = e instanceof QboError ? `QuickBooks: ${e.detail}` : "Posting stopped unexpectedly.";
+          const message =
+            e instanceof QboError
+              ? `QuickBooks: ${e.detail}`
+              : e?.message === "negative-batch-cost"
+                ? "QuickBooks valued the consumed inputs below $0 (check for negative stock)."
+                : "Posting stopped unexpectedly.";
           await ref.update({ status: "failed", qbo: qboIds, error: `${message} QuickBooks records already created are listed on this run; review them before retrying.` });
           await log("post-run", false, { runId: id, ...qboIds });
           throw e;

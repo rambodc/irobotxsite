@@ -6,6 +6,7 @@ import { containerNoun, fmtDate, fmtMoney, fmtNum, fmtUnitCost, friendlyError, s
 import { Badge, Empty, Field, Notice, Skeleton, numberValue } from "./ui";
 
 const uuid = () => crypto.randomUUID();
+const todayLocal = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Edmonton" }).format(new Date());
 function suggestLot(base: string, runs: Run[]) {
   const d = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Edmonton", year: "2-digit", month: "2-digit", day: "2-digit" }).format(new Date()).replace(/-/g, "");
   const code = (base.replace(/[^A-Za-z0-9]+/g, "").slice(0, 6) || "LOT").toUpperCase();
@@ -21,6 +22,7 @@ export default function ProductionView({ client, data, refresh, patch, go, initi
   const [qty, setQty] = useState(firstRecipe ? String(firstRecipe.outputQty) : "");
   const [lot, setLot] = useState("");
   const [note, setNote] = useState("");
+  const [runDate, setRunDate] = useState(todayLocal);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [previewError, setPreviewError] = useState("");
@@ -65,13 +67,15 @@ export default function ProductionView({ client, data, refresh, patch, go, initi
     setPosting(true);
     setError("");
     try {
-      const { run } = await client.postRun({ recipeId, outputQty: amount, lotNumber: lot.trim(), note: note.trim(), requestId });
+      const today = todayLocal();
+      const { run } = await client.postRun({ recipeId, outputQty: amount, lotNumber: lot.trim(), note: note.trim(), runDate: runDate && runDate !== today ? runDate : null, requestId });
       patch((d) => ({ ...d, runs: [run, ...d.runs.filter((r) => r.id !== run.id)] }));
       setPosted(run);
       setConfirming(false);
       setRequestId(uuid());
       setLot("");
       setNote("");
+      setRunDate(todayLocal());
       await refresh();
     } catch (err) {
       setError(friendlyError(err));
@@ -162,13 +166,18 @@ export default function ProductionView({ client, data, refresh, patch, go, initi
               </div>
             )}
           </Field>
-          <Field label="Note" optional>
-            {(id) => <input id={id} value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} placeholder="Operator, tank, QC result…" />}
-          </Field>
+          <div className="qc-grid-2">
+            <Field label="Production date" hint={runDate && runDate < todayLocal() ? "Backdated: posts on this date in QuickBooks." : undefined}>
+              {(id) => <input id={id} type="date" value={runDate} max={todayLocal()} onChange={(e) => (setRunDate(e.target.value), changed())} />}
+            </Field>
+            <Field label="Note" optional>
+              {(id) => <input id={id} value={note} maxLength={500} onChange={(e) => setNote(e.target.value)} placeholder="Operator, tank, QC result…" />}
+            </Field>
+          </div>
           {error && <Notice tone="bad">{error}</Notice>}
           {confirming && plan && (
             <Notice tone="warn">
-              This posts to QuickBooks {data.connection.env === "sandbox" ? "(sandbox)" : ""}: an inventory adjustment using {plan.lines.length} input{plan.lines.length === 1 ? "" : "s"} and one adding {fmtNum(plan.outputQty)} {unitOf(out)} of {plan.outputName}. Confirm to continue.
+              This posts to QuickBooks{data.connection.env === "sandbox" ? " (sandbox)" : ""}: an inventory adjustment using {plan.lines.length} input{plan.lines.length === 1 ? "" : "s"}, and a $0 internal production bill adding {fmtNum(plan.outputQty)} {unitOf(out)} of {plan.outputName} at the exact batch cost. Confirm to continue.
             </Notice>
           )}
           <div className="qc-form-actions">
@@ -223,7 +232,7 @@ export default function ProductionView({ client, data, refresh, patch, go, initi
                 <strong>{fmtMoney(plan.estTotal)}</strong>
                 <small>{fmtUnitCost(plan.estUnitCost)}/{unitOf(out)}</small>
               </div>
-              <p className="qc-fine">The posted cost is what QuickBooks actually removes from inventory (FIFO), moved through Production WIP into {plan.outputName}.</p>
+              <p className="qc-fine">The posted cost is what QuickBooks actually removes from inventory (FIFO). It moves through Production WIP and arrives in {plan.outputName} on a $0 internal production bill, so it is never re-priced later.</p>
               {plan.problems.length > 0 && (
                 <Notice tone="bad">
                   <strong>Can’t post yet.</strong> {plan.problems.join(" ")}
@@ -249,8 +258,8 @@ function PostedSummary({ run, unit }: { run: Run; unit: string }) {
         <dl className="qc-dl">
           <div><dt>Actual cost</dt><dd>{fmtMoney(run.result.actualCost)}</dd></div>
           <div><dt>Cost per {unit}</dt><dd>{fmtUnitCost(run.result.unitCost)}</dd></div>
-          <div><dt>Added to {run.outputName}</dt><dd>{fmtMoney(run.result.valueIn)}</dd></div>
-          <div><dt>WIP net change</dt><dd>{fmtMoney(run.result.wipAfter - run.result.wipBefore)}</dd></div>
+          <div><dt>Added to {run.outputName}</dt><dd>{fmtMoney(run.result.billAmount)}</dd></div>
+          <div><dt>Production WIP after</dt><dd>{fmtMoney(run.result.wipAfter)}</dd></div>
         </dl>
       )}
       <QboIds run={run} />
@@ -261,7 +270,7 @@ function PostedSummary({ run, unit }: { run: Run; unit: string }) {
 function QboIds({ run }: { run: Run }) {
   const ids = [
     run.qbo.consumeAdjustmentId && `Adj #${run.qbo.consumeAdjustmentId} consume`,
-    run.qbo.produceAdjustmentId && `Adj #${run.qbo.produceAdjustmentId} produce`,
+    run.qbo.billId && `Bill #${run.qbo.billId}${run.qbo.billDocNumber ? ` ${run.qbo.billDocNumber}` : ""}`,
     run.qbo.journalEntryId && `JE #${run.qbo.journalEntryId} rounding`,
   ].filter(Boolean) as string[];
   if (!ids.length) return null;
@@ -293,7 +302,7 @@ function RunHistory({ runs }: { runs: Run[] }) {
             <div key={r.id} className="qc-tr" role="row">
               <span role="cell" className="qc-cell-name">
                 <strong>{r.outputName}</strong>
-                <small>{fmtDate(r.postedAt || r.createdAt)}{r.lotNumber ? ` · lot ${r.lotNumber}` : ""}</small>
+                <small>{r.result?.runDate && r.result.runDate !== (r.postedAt || "").slice(0, 10) ? `${r.result.runDate} (backdated)` : fmtDate(r.postedAt || r.createdAt)}{r.lotNumber ? ` · lot ${r.lotNumber}` : ""}</small>
               </span>
               <span role="cell" data-label="Produced">{fmtNum(r.outputQty)}<small> · {r.recipeName}</small></span>
               <span role="cell" className="qc-num" data-label="Cost">

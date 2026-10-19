@@ -3,7 +3,7 @@ import Decimal from "decimal.js";
 const D = (v) => new Decimal(v ?? 0);
 export const money = (v) => D(v).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber();
 export const qty = (v) => D(v).toDecimalPlaces(6, Decimal.ROUND_HALF_UP).toNumber();
-// QuickBooks stores item unit cost; 4 decimals keeps rounding residuals to cents.
+// Display unit cost (the posted value is always the exact batch total).
 export const unitCost = (v) => D(v).toDecimalPlaces(4, Decimal.ROUND_HALF_UP).toNumber();
 
 /** Scale a recipe (inputs per `outputQty`) to the quantity actually produced. */
@@ -62,16 +62,52 @@ export function planRun(recipe, outputQty, itemsById) {
 
 /**
  * Settle a run from the WIP clearing account balances QuickBooks reports:
- *  - consume step debits WIP with the actual cost of raws removed,
- *  - produce step credits WIP with the finished goods value added,
- *  - any remaining (rounding) residual is cleared by journal entry.
+ *  - the consume adjustment debits WIP with QuickBooks' actual (FIFO) cost of the raws removed,
+ *  - the $0 production bill credits WIP with exactly that cost and adds it to the finished item,
+ *  - anything left in WIP (should be $0.00) is cleared by journal entry.
  */
-export function settleRun({ wipBefore, wipAfterConsume, wipAfterProduce = null, outputQty }) {
+export function settleRun({ wipBefore, wipAfterConsume, wipAfterBill = null, outputQty }) {
   const actualCost = money(D(wipAfterConsume).minus(wipBefore));
   const perUnit = unitCost(D(actualCost).div(outputQty));
-  if (wipAfterProduce === null) return { actualCost, unitCost: perUnit };
-  const residual = money(D(wipAfterProduce).minus(wipBefore));
-  return { actualCost, unitCost: perUnit, valueIn: money(D(actualCost).minus(residual)), residual };
+  if (wipAfterBill === null) return { actualCost, unitCost: perUnit };
+  return { actualCost, unitCost: perUnit, residual: money(D(wipAfterBill).minus(wipBefore)) };
+}
+
+/**
+ * Lines of the $0 internal production bill: the finished item comes in at the exact batch cost
+ * (QuickBooks keeps the line Amount; UnitPrice is informational) and an equal negative line
+ * credits Production WIP, so the bill total and the payable are $0.
+ */
+export function productionBillLines({ itemId, outputQty, actualCost, wipAccountId, taxCodeId, description }) {
+  const amount = money(actualCost);
+  if (amount < 0) throw new Error("negative-batch-cost");
+  const tax = taxCodeId ? { TaxCodeRef: { value: taxCodeId } } : {};
+  return [
+    {
+      DetailType: "ItemBasedExpenseLineDetail",
+      Amount: amount,
+      Description: description,
+      ItemBasedExpenseLineDetail: {
+        ItemRef: { value: itemId },
+        Qty: qty(outputQty),
+        UnitPrice: D(amount).div(outputQty).toDecimalPlaces(6, Decimal.ROUND_HALF_UP).toNumber(),
+        ...tax,
+      },
+    },
+    {
+      DetailType: "AccountBasedExpenseLineDetail",
+      Amount: -amount,
+      Description: `${description} · clear Production WIP`,
+      AccountBasedExpenseLineDetail: { AccountRef: { value: wipAccountId }, ...tax },
+    },
+  ];
+}
+
+/** Bill DocNumber (QuickBooks allows 21 characters): PR-<lot>, or PR-<run id> without a lot. */
+export function productionDocNumber(lotNumber, runId) {
+  const lot = String(lotNumber || "").replace(/\s+/g, "-");
+  const byLot = `PR-${lot}`;
+  return lot && byLot.length <= 21 ? byLot : `PR-${String(runId).slice(0, 12).toUpperCase()}`;
 }
 
 /** Journal entry lines clearing a WIP residual to the chosen account. */

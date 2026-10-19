@@ -3,10 +3,11 @@ import {
   UserRound,
   UsersRound,
   MessagesSquare,
+  FlaskConical,
   type LucideIcon,
 } from "lucide-react";
 import type { Profile } from "../api";
-export type MiniAppId = "account" | "contact-team" | "user-access" | "trading";
+export type MiniAppId = "account" | "contact-team" | "user-access" | "trading" | "qb-chem";
 export interface MiniApp {
   id: MiniAppId;
   label: string;
@@ -23,6 +24,14 @@ export const MINI_APPS: MiniApp[] = [
     path: "/portal/trading",
     icon: ChartCandlestick,
     access: "owner",
+  },
+  {
+    id: "qb-chem",
+    label: "QB Chem",
+    description: "Chemical inventory, recipes and production batches synced to QuickBooks.",
+    path: "/portal/qb-chem",
+    icon: FlaskConical,
+    access: "admin",
   },
   {
     id: "account",

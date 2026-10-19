@@ -48,11 +48,14 @@ const owner: Profile = {
 afterEach(cleanup);
 describe("mini app registry and portal", () => {
   it("preserves owner-only trading and existing role visibility", () => {
-    expect(visibleMiniApps(owner)).toHaveLength(4);
+    expect(visibleMiniApps(owner)).toHaveLength(5);
+    expect(canOpenApp(owner, "qb-chem")).toBe(true);
     const other = { ...owner, miniApps: [] };
     expect(canOpenApp(other, "trading")).toBe(false);
     expect(canOpenApp(other, "user-access")).toBe(true);
     expect(canOpenApp({ ...other, role: "member" }, "user-access")).toBe(false);
+    expect(canOpenApp({ ...other, role: "member" }, "qb-chem")).toBe(false);
+    expect(canOpenApp(other, "qb-chem")).toBe(true);
     expect(visibleMiniApps({ ...owner, status: "disabled" })).toHaveLength(0);
   });
   it("renders the authenticated launcher with standalone app destinations", async () => {

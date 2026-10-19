@@ -281,3 +281,11 @@
     transform: none;
   }
 }
+
+.qb-chem-tabs { display: flex; gap: 0.75rem; flex-wrap: wrap; margin: 1rem 0; }
+.qb-chem-status { opacity: 0.8; margin: 0.5rem 0 1rem; font-size: 0.95rem; }
+.qb-chem-list { list-style: none; padding: 0; margin: 0; display: grid; gap: 0.75rem; }
+.qb-chem-list li { padding: 0.5rem 0; border-bottom: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+.qb-chem-list ul { margin: 0.35rem 0 0 1rem; }
+.qb-chem-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem; }
+.qb-chem code { word-break: break-all; font-size: 0.85rem; }

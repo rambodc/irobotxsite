@@ -9,7 +9,7 @@ export interface Profile {
   role: "admin" | "member";
   status: "invited" | "active" | "disabled";
   apps: AppId[];
-  miniApps?: ("account" | "contact-team" | "user-access" | "trading")[];
+  miniApps?: ("account" | "contact-team" | "user-access" | "trading" | "qb-chem")[];
   invitationDelivery?: "sent" | "failed" | "pending";
 }
 export interface ContactInput {
@@ -20,6 +20,67 @@ export interface ContactInput {
   message: string;
   website: string;
   requestId: string;
+}
+
+export type ChemKind = "raw" | "finished";
+export type ChemUnit = "L" | "kg";
+export type ContainerType = "drum" | "tote" | "pail" | "other";
+export interface QbChemical {
+  id: string;
+  name: string;
+  kind: ChemKind;
+  baseUnit: ChemUnit;
+  containerType: ContainerType;
+  containerCapacity: number;
+  sku: string;
+  notes: string;
+  purchaseCost: number;
+  unitPrice: number;
+  active: boolean;
+  qboItemId: string | null;
+  qtyBaseOnHand: number;
+  containersOnHand: number;
+}
+export interface QbRecipe {
+  id: string;
+  name: string;
+  finishedChemicalId: string;
+  outputQtyBase: number;
+  lines: { chemicalId: string; qtyBase: number }[];
+  active: boolean;
+}
+export interface QbBatch {
+  id: string;
+  recipeId: string;
+  finishedChemicalId: string;
+  outputQtyBase: number;
+  outputContainers: number;
+  lotNumber: string;
+  note: string;
+  status: string;
+  costTotal: number;
+  costPerBase: number;
+  consumed: { chemicalId: string; qtyBase: number; unitCost: number; cost: number }[];
+  qbo: Record<string, unknown>;
+}
+export interface QbChemStatus {
+  connection: {
+    connected: boolean;
+    env?: string;
+    realmId?: string | null;
+    companyName?: string | null;
+  };
+  settings: {
+    wipAccountId: string | null;
+    inventoryAssetId: string | null;
+    incomeAccountId: string | null;
+    cogsAccountId: string | null;
+    ready: boolean;
+  } | null;
+  oauthRedirectUri: string;
+  chemicals: QbChemical[];
+  recipes: QbRecipe[];
+  batches: QbBatch[];
 }
 export type Delivery = { delivery: "sent" | "failed" | "pending"; id?: string };
 const call = async <I, O>(name: string, input: I) => {
@@ -45,7 +106,20 @@ export const api = {
     call<ContactInput, Delivery>("submitContact", data),
   reset: (email: string) =>
     call<{ email: string }, { ok: boolean }>("requestPasswordReset", { email }),
+  qbChemStatus: () =>
+    call<Record<string, never>, QbChemStatus>("qbChemStatus", {}),
+  qbChemUpsertChemical: (data: Record<string, unknown>) =>
+    call<Record<string, unknown>, QbChemical>("qbChemUpsertChemical", data),
+  qbChemUpsertRecipe: (data: Record<string, unknown>) =>
+    call<Record<string, unknown>, QbRecipe>("qbChemUpsertRecipe", data),
+  qbChemPostBatch: (data: Record<string, unknown>) =>
+    call<Record<string, unknown>, { id: string; status: string; costTotal: number; costPerBase: number; qbo: Record<string, unknown> }>("qbChemPostBatch", data),
+  qbChemConnectStart: () =>
+    call<Record<string, never>, { url: string; redirectUri: string }>("qbChemConnectStart", {}),
+  qbChemEnsureSetup: () =>
+    call<Record<string, never>, { settings: QbChemStatus["settings"] }>("qbChemEnsureSetup", {}),
 };
+
 export function errorMessage(error: unknown): string {
   const code =
     error && typeof error === "object" && "code" in error

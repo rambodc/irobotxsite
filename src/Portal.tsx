@@ -18,6 +18,7 @@ const ContactTeam = lazy(
   () => import("./mini-apps/contact-team/ContactTeamApp"),
 );
 const Trading = lazy(() => import("./mini-apps/trading/TradingApp"));
+const QbChem = lazy(() => import("./mini-apps/qb-chem/QbChemApp"));
 function AuthPage({ path }: { path: string }) {
   const action = path === "/accept-invite" || path === "/auth/action";
   const reset = path === "/forgot-password";
@@ -365,6 +366,8 @@ export default function Portal({ path }: { path: string }) {
                 <Admin />
               ) : app.id === "contact-team" ? (
                 <ContactTeam profile={profile} />
+              ) : app.id === "qb-chem" ? (
+                <QbChem />
               ) : (
                 <Trading />
               )}

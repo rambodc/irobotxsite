@@ -9,7 +9,7 @@ export function miniApps(uid, profile) {
     "account",
     "contact-team",
     ...(profile.role === "admin" && profile.status === "active"
-      ? ["user-access"]
+      ? ["user-access", "qb-chem"]
       : []),
     ...(canTrade(uid, profile) ? ["trading"] : []),
   ];

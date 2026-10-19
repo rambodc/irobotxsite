@@ -417,3 +417,14 @@ export const { mainnetDashboard, mainnetSettings, mainnetAutomation, mainnetRequ
 export { mainnetWorker } from './mainnet/worker.js';
 export { mainnetTick } from './mainnet/service.js';
 export { mainnetAnalyst } from './mainnet/analyst.js';
+
+import { createQbChemHandlers } from "./qbchem/service.js";
+export const {
+  qbChemStatus,
+  qbChemUpsertChemical,
+  qbChemUpsertRecipe,
+  qbChemPostBatch,
+  qbChemConnectStart,
+  qbChemEnsureSetup,
+  qbChemOAuthCallback,
+} = createQbChemHandlers({ endpoint, base, current, rate });

@@ -1,630 +1,458 @@
+// QB Chem backend. QuickBooks Online is the single master for items; Firestore
+// stores only what QuickBooks cannot (setup extras keyed by QBO Item Id,
+// recipes, production runs, sync log). Everything is admin-only.
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { onRequest, HttpsError } from "firebase-functions/v2/https";
 import { defineSecret } from "firebase-functions/params";
-import { randomBytes } from "node:crypto";
-import { chemicalInput, recipeInput, batchInput, text, num } from "./policy.js";
-import {
-  scaleRecipe,
-  costBatch,
-  containersFromBase,
-  residualToClear,
-} from "./costing.js";
-import * as qbo from "./qbo.js";
+import { createHash, randomBytes } from "node:crypto";
+import { createInput, updateInput, setupInput, recipeInput, runInput, qboId, docId, InputError } from "./policy.js";
+import { toItem, mergeCatalog, findDuplicates } from "./catalog.js";
+import { planRun, settleRun, residualJournalLines } from "./costing.js";
+import { createQbo, QboError, isStale, isDuplicateName, authorizeUrl, exchangeCode, publicConnection, CONNECTION_DOC } from "./qbo.js";
 
-const qboClientId = defineSecret("QBO_CLIENT_ID");
-const qboClientSecret = defineSecret("QBO_CLIENT_SECRET");
+const clientIdSecret = defineSecret("QBO_CLIENT_ID");
+const clientSecretSecret = defineSecret("QBO_CLIENT_SECRET");
+export const OAUTH_REDIRECT_URI = "https://us-central1-irobotxsite.cloudfunctions.net/qbChemOAuthCallback";
+const TIME_ZONE = "America/Edmonton";
 
-export const OAUTH_REDIRECT =
-  "https://us-central1-irobotxsite.cloudfunctions.net/qbChemOAuthCallback";
-
-const chemCol = () => getFirestore().collection("qbChemChemicals");
-const recipeCol = () => getFirestore().collection("qbChemRecipes");
-const batchCol = () => getFirestore().collection("qbChemBatches");
-const syncCol = () => getFirestore().collection("qbChemSyncLog");
-const settingsRef = () => getFirestore().doc("qbChemConfig/settings");
-const oauthStateRef = (state) =>
-  getFirestore().doc(`qbChemOAuthStates/${state}`);
-
+const db = () => getFirestore();
+const setupCol = () => db().collection("qbChemItems");
+const recipeCol = () => db().collection("qbChemRecipes");
+const runCol = () => db().collection("qbChemRuns");
+const logCol = () => db().collection("qbChemSyncLog");
+const settingsRef = () => db().doc("qbChemConfig/settings");
+const lockRef = () => db().doc("qbChemConfig/runLock");
+const stateRef = (s) => db().doc(`qbChemOAuthStates/${s}`);
 const stamp = () => FieldValue.serverTimestamp();
+const iso = (t) => (t && typeof t.toDate === "function" ? t.toDate().toISOString() : t || null);
+const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: TIME_ZONE }).format(new Date());
 
-function creds() {
-  return {
-    clientId: qboClientId.value(),
-    clientSecret: qboClientSecret.value(),
-  };
-}
-
-function mapHttps(e) {
-  if (e instanceof HttpsError) throw e;
-  if (e.message === "permission-denied")
-    throw new HttpsError("permission-denied", "Administrator access required.");
-  if (e.message === "invalid-argument")
-    throw new HttpsError("invalid-argument", "Request could not be accepted.");
-  if (e.message === "qbo-not-connected")
-    throw new HttpsError(
-      "failed-precondition",
-      "QuickBooks is not connected. Connect the sandbox first.",
-    );
-  if (e.message === "qbo-api-error") {
-    console.error("QBO API error", { status: e.status });
-    throw new HttpsError("internal", "QuickBooks request failed.");
+function toHttps(e) {
+  if (e instanceof HttpsError) return e;
+  if (e instanceof InputError) return new HttpsError("invalid-argument", e.message);
+  if (e?.message === "qbo-not-connected")
+    return new HttpsError("failed-precondition", "QuickBooks is not connected. Open Settings to connect.");
+  if (e?.message === "qbo-reauth")
+    return new HttpsError("failed-precondition", "QuickBooks needs to be reconnected. Open Settings and choose Connect QuickBooks.");
+  if (e instanceof QboError) {
+    console.error("QuickBooks API error", { status: e.status, code: e.qboCode });
+    return new HttpsError(e.status >= 500 ? "unavailable" : "failed-precondition", `QuickBooks: ${e.detail}`);
   }
-  console.error("QB Chem operation failed", { code: e.code || e.message });
-  throw new HttpsError("internal", "The request could not be completed.");
+  console.error("QB Chem failure", { code: e?.code || e?.message || "unknown" });
+  return new HttpsError("internal", "QB Chem could not complete the request.");
 }
 
-function call(options, fn) {
-  // endpoint factory injected from index.js
-  return options.__endpoint(options, async (request) => {
-    try {
-      return await fn(request);
-    } catch (e) {
-      mapHttps(e);
-    }
-  });
+async function log(action, ok, summary) {
+  await logCol().add({ action, ok, summary, at: stamp() });
 }
 
-export function createQbChemHandlers({ endpoint, base, current }) {
-  const secretsBase = {
-    ...base,
-    secrets: [qboClientId, qboClientSecret],
-    timeoutSeconds: 120,
-    memory: "512MiB",
+async function setupMap() {
+  const snap = await setupCol().get();
+  return Object.fromEntries(snap.docs.map((d) => [d.id, publicSetup(d.data())]));
+}
+function publicSetup(d) {
+  return { role: d.role, baseUnit: d.baseUnit, containerType: d.containerType, containerCapacity: d.containerCapacity, notes: d.notes || "" };
+}
+async function catalog(q) {
+  const [items, setups] = await Promise.all([q.items(), setupMap()]);
+  return mergeCatalog(items.map(toItem), setups);
+}
+async function catalogItem(q, id) {
+  const [item, setup] = await Promise.all([q.getItem(id), setupCol().doc(id).get()]);
+  return mergeCatalog([toItem(item)], setup.exists ? { [id]: publicSetup(setup.data()) } : {})[0];
+}
+
+async function ensureSettings(q) {
+  const cur = (await settingsRef().get()).data() || {};
+  if (cur.wipAccountId && cur.inventoryAssetId && cur.incomeAccountId && cur.cogsAccountId && cur.residualAccountId) return cur;
+  const accounts = await q.accounts();
+  const pick = (f) => accounts.find((a) => a.Active !== false && f(a));
+  const inventory = pick((a) => a.AccountSubType === "Inventory");
+  const income = pick((a) => a.AccountSubType === "SalesOfProductIncome");
+  const cogs = pick((a) => a.AccountType === "Cost of Goods Sold" && a.AccountSubType === "SuppliesMaterialsCogs" && a.Name === "Cost of Goods Sold") ||
+    pick((a) => a.AccountType === "Cost of Goods Sold");
+  let wip = pick((a) => a.Name === "Production WIP");
+  if (!wip) wip = await q.createAccount({ Name: "Production WIP", AccountType: "Other Current Asset", AccountSubType: "OtherCurrentAssets" });
+  if (!inventory || !income || !cogs)
+    throw new HttpsError("failed-precondition", "QuickBooks needs an Inventory Asset, a product income and a Cost of Goods Sold account.");
+  const next = {
+    wipAccountId: String(wip.Id),
+    inventoryAssetId: String(inventory.Id),
+    incomeAccountId: String(income.Id),
+    cogsAccountId: String(cogs.Id),
+    // Rounding cents left in WIP go back to Inventory Asset so the balance sheet carries full batch cost.
+    residualAccountId: cur.residualAccountId || String(inventory.Id),
+    updatedAt: stamp(),
   };
-
-  const adminCall = (opts, fn) =>
-    endpoint(opts, async (request) => {
-      try {
-        const account = await current(request, true);
-        return await fn(request, account);
-      } catch (e) {
-        mapHttps(e);
-      }
-    });
-
-  const qbChemStatus = adminCall(secretsBase, async () => {
-    const [conn, settings, chemicals, recipes, batches] = await Promise.all([
-      qbo.publicConnection(await qbo.getConnection()),
-      settingsRef().get(),
-      chemCol().orderBy("name").limit(100).get(),
-      recipeCol().orderBy("name").limit(100).get(),
-      batchCol().orderBy("createdAt", "desc").limit(50).get(),
-    ]);
-    return {
-      connection: conn,
-      settings: settings.exists ? publicSettings(settings.data()) : null,
-      oauthRedirectUri: OAUTH_REDIRECT,
-      chemicals: chemicals.docs.map((d) => serializeChem(d.id, d.data())),
-      recipes: recipes.docs.map((d) => serializeRecipe(d.id, d.data())),
-      batches: batches.docs.map((d) => serializeBatch(d.id, d.data())),
-    };
-  });
-
-  const qbChemUpsertChemical = adminCall(secretsBase, async (request, account) => {
-    const input = chemicalInput(request.data || {});
-    const id = request.data.id ? text(request.data.id, 128) : null;
-    const c = creds();
-    const settings = await ensureSettings(c);
-
-    if (id) {
-      const ref = chemCol().doc(id);
-      const snap = await ref.get();
-      if (!snap.exists) throw new HttpsError("not-found", "Chemical not found.");
-      const prev = snap.data();
-      if (prev.qboItemId) {
-        const existing = (await qbo.getItem(c, prev.qboItemId)).Item;
-        await qbo.updateItem(c, {
-          Id: prev.qboItemId,
-          SyncToken: existing.SyncToken,
-          sparse: true,
-          Name: existing.Name,
-          Type: "Inventory",
-          TrackQtyOnHand: true,
-          QtyOnHand: existing.QtyOnHand,
-          InvStartDate: existing.InvStartDate,
-          PurchaseCost: input.purchaseCost,
-          UnitPrice: input.unitPrice,
-          IncomeAccountRef: existing.IncomeAccountRef,
-          ExpenseAccountRef: existing.ExpenseAccountRef,
-          AssetAccountRef: existing.AssetAccountRef,
-          ...(input.sku ? { Sku: input.sku } : {}),
-        });
-      }
-      const containers = containersFromBase(
-        prev.qtyBaseOnHand || 0,
-        input.containerCapacity,
-      );
-      await ref.update({
-        ...input,
-        containersOnHand: containers.containers,
-        updatedAt: stamp(),
-        updatedBy: account.uid,
-      });
-      const next = (await ref.get()).data();
-      return serializeChem(id, next);
-    }
-
-    const startQty = num(Number(request.data.initialQtyBase ?? 0), { min: 0 });
-    const itemBody = {
-      Name: input.name,
-      Type: "Inventory",
-      TrackQtyOnHand: true,
-      QtyOnHand: startQty,
-      InvStartDate: new Date().toISOString().slice(0, 10),
-      PurchaseCost: input.purchaseCost,
-      UnitPrice: input.unitPrice || input.purchaseCost,
-      IncomeAccountRef: { value: settings.incomeAccountId },
-      ExpenseAccountRef: { value: settings.cogsAccountId },
-      AssetAccountRef: { value: settings.inventoryAssetId },
-    };
-    if (input.sku) itemBody.Sku = input.sku;
-    let created;
-    try {
-      created = await qbo.createItem(c, itemBody);
-    } catch (e) {
-      // Name collision — suffix and retry once
-      itemBody.Name = `${input.name} (${Date.now().toString(36).slice(-4)})`;
-      created = await qbo.createItem(c, itemBody);
-    }
-    const qboItemId = created.Item.Id;
-    const containers = containersFromBase(startQty, input.containerCapacity);
-    const ref = chemCol().doc();
-    const doc = {
-      ...input,
-      name: created.Item.Name || input.name,
-      qboItemId,
-      qtyBaseOnHand: startQty,
-      containersOnHand: containers.containers,
-      createdAt: stamp(),
-      updatedAt: stamp(),
-      createdBy: account.uid,
-    };
-    await ref.set(doc);
-    await logSync("create-chemical", { chemicalId: ref.id, qboItemId }, true);
-    return serializeChem(ref.id, { ...doc, createdAt: null, updatedAt: null });
-  });
-
-  const qbChemUpsertRecipe = adminCall(base, async (request, account) => {
-    const input = recipeInput(request.data || {});
-    const finished = await chemCol().doc(input.finishedChemicalId).get();
-    if (!finished.exists || finished.data().kind !== "finished")
-      throw new HttpsError("invalid-argument", "Finished product required.");
-    for (const line of input.lines) {
-      const raw = await chemCol().doc(line.chemicalId).get();
-      if (!raw.exists || raw.data().kind !== "raw")
-        throw new HttpsError(
-          "invalid-argument",
-          "Recipe lines must be raw chemicals.",
-        );
-    }
-    const id = request.data.id ? text(request.data.id, 128) : null;
-    if (id) {
-      const ref = recipeCol().doc(id);
-      if (!(await ref.get()).exists)
-        throw new HttpsError("not-found", "Recipe not found.");
-      await ref.update({ ...input, updatedAt: stamp(), updatedBy: account.uid });
-      return serializeRecipe(id, (await ref.get()).data());
-    }
-    const ref = recipeCol().doc();
-    const doc = {
-      ...input,
-      createdAt: stamp(),
-      updatedAt: stamp(),
-      createdBy: account.uid,
-    };
-    await ref.set(doc);
-    return serializeRecipe(ref.id, { ...doc, createdAt: null, updatedAt: null });
-  });
-
-  const qbChemPostBatch = adminCall(secretsBase, async (request, account) => {
-    const input = batchInput(request.data || {});
-    const recipeSnap = await recipeCol().doc(input.recipeId).get();
-    if (!recipeSnap.exists || recipeSnap.data().active === false)
-      throw new HttpsError("not-found", "Recipe not found.");
-    const recipe = recipeSnap.data();
-    const scaled = scaleRecipe(recipe, input.outputQtyBase);
-    const unitCosts = {};
-    const chemSnaps = {};
-    for (const line of scaled.lines) {
-      const snap = await chemCol().doc(line.chemicalId).get();
-      if (!snap.exists) throw new HttpsError("not-found", "Raw chemical missing.");
-      const chem = snap.data();
-      if ((chem.qtyBaseOnHand || 0) + 1e-9 < line.qtyBase)
-        throw new HttpsError(
-          "failed-precondition",
-          `Insufficient stock for ${chem.name}.`,
-        );
-      chemSnaps[line.chemicalId] = { id: snap.id, ...chem };
-      unitCosts[line.chemicalId] = Number(chem.purchaseCost) || 0;
-    }
-    const finishedSnap = await chemCol().doc(recipe.finishedChemicalId).get();
-    if (!finishedSnap.exists)
-      throw new HttpsError("not-found", "Finished chemical missing.");
-    const finished = { id: finishedSnap.id, ...finishedSnap.data() };
-    const costing = costBatch(scaled.lines, unitCosts, input.outputQtyBase);
-    const settings = await ensureSettings(creds());
-    const c = creds();
-    const batchRef = batchCol().doc();
-    const txnDate = new Date().toISOString().slice(0, 10);
-    const privateNote = `QB Chem batch ${batchRef.id}${
-      input.lotNumber ? ` lot ${input.lotNumber}` : ""
-    }`;
-
-    await batchRef.set({
-      recipeId: input.recipeId,
-      finishedChemicalId: finished.id,
-      outputQtyBase: input.outputQtyBase,
-      outputContainers: containersFromBase(
-        input.outputQtyBase,
-        finished.containerCapacity,
-      ).containers,
-      lotNumber: input.lotNumber || "",
-      note: input.note || "",
-      status: "posting",
-      costTotal: costing.costTotal,
-      costPerBase: costing.costPerBase,
-      consumed: costing.consumed,
-      qbo: {},
-      createdBy: account.uid,
-      createdAt: stamp(),
-    });
-
-    try {
-      const decreaseLines = costing.consumed.map((line) => ({
-        DetailType: "ItemAdjustmentLineDetail",
-        ItemAdjustmentLineDetail: {
-          ItemRef: { value: chemSnaps[line.chemicalId].qboItemId },
-          QtyDiff: -line.qtyBase,
-        },
-      }));
-      const iaDown = await qbo.createInventoryAdjustment(c, {
-        AdjustAccountRef: { value: settings.wipAccountId },
-        TxnDate: txnDate,
-        PrivateNote: `${privateNote} — consume raws`,
-        DocNumber: docNum("R", batchRef.id),
-        Line: decreaseLines,
-      });
-
-      const fgItem = (await qbo.getItem(c, finished.qboItemId)).Item;
-      await qbo.updateItem(c, {
-        Id: finished.qboItemId,
-        SyncToken: fgItem.SyncToken,
-        sparse: true,
-        PurchaseCost: costing.costPerBase,
-        Name: fgItem.Name,
-        Type: "Inventory",
-        TrackQtyOnHand: true,
-        QtyOnHand: fgItem.QtyOnHand,
-        InvStartDate: fgItem.InvStartDate,
-        IncomeAccountRef: fgItem.IncomeAccountRef,
-        ExpenseAccountRef: fgItem.ExpenseAccountRef,
-        AssetAccountRef: fgItem.AssetAccountRef,
-      });
-
-      const iaUp = await qbo.createInventoryAdjustment(c, {
-        AdjustAccountRef: { value: settings.wipAccountId },
-        TxnDate: txnDate,
-        PrivateNote: `${privateNote} — produce finished`,
-        DocNumber: docNum("F", batchRef.id),
-        Line: [
-          {
-            DetailType: "ItemAdjustmentLineDetail",
-            ItemAdjustmentLineDetail: {
-              ItemRef: { value: finished.qboItemId },
-              QtyDiff: input.outputQtyBase,
-            },
-          },
-        ],
-      });
-
-      let journalEntryId = null;
-      let wipBalance = 0;
-      const wip = (await qbo.getAccount(c, settings.wipAccountId)).Account;
-      wipBalance = Number(wip.CurrentBalance || 0);
-      const residual = residualToClear(wipBalance);
-      if (Math.abs(residual) >= 0.01) {
-        const je = await qbo.createJournalEntry(c, {
-          TxnDate: txnDate,
-          PrivateNote: `${privateNote} — clear WIP residual`,
-          Line: [
-            {
-              Amount: Math.abs(residual),
-              DetailType: "JournalEntryLineDetail",
-              Description: "QB Chem WIP clear",
-              JournalEntryLineDetail: {
-                PostingType: residual > 0 ? "Credit" : "Debit",
-                AccountRef: { value: settings.wipAccountId },
-              },
-            },
-            {
-              Amount: Math.abs(residual),
-              DetailType: "JournalEntryLineDetail",
-              Description: "QB Chem WIP clear",
-              JournalEntryLineDetail: {
-                PostingType: residual > 0 ? "Debit" : "Credit",
-                AccountRef: { value: settings.inventoryAssetId },
-              },
-            },
-          ],
-        });
-        journalEntryId = je.JournalEntry?.Id || null;
-      }
-
-      for (const line of costing.consumed) {
-        const chem = chemSnaps[line.chemicalId];
-        const nextQty = roundQty(chem.qtyBaseOnHand - line.qtyBase);
-        const caps = containersFromBase(nextQty, chem.containerCapacity);
-        await chemCol().doc(chem.id).update({
-          qtyBaseOnHand: nextQty,
-          containersOnHand: caps.containers,
-          updatedAt: stamp(),
-        });
-      }
-      const nextFg = roundQty(finished.qtyBaseOnHand + input.outputQtyBase);
-      const fgCaps = containersFromBase(nextFg, finished.containerCapacity);
-      await chemCol().doc(finished.id).update({
-        qtyBaseOnHand: nextFg,
-        containersOnHand: fgCaps.containers,
-        purchaseCost: costing.costPerBase,
-        updatedAt: stamp(),
-      });
-
-      const qboMeta = {
-        adjustmentIds: [
-          iaDown.InventoryAdjustment?.Id,
-          iaUp.InventoryAdjustment?.Id,
-        ].filter(Boolean),
-        journalEntryId,
-        wipResidualCleared: residual,
-        wipBalanceBeforeClear: wipBalance,
-        syncedAt: new Date().toISOString(),
-      };
-      await batchRef.update({
-        status: "posted",
-        qbo: qboMeta,
-        postedAt: stamp(),
-      });
-      await logSync("post-batch", { batchId: batchRef.id, ...qboMeta }, true);
-      return {
-        id: batchRef.id,
-        status: "posted",
-        costTotal: costing.costTotal,
-        costPerBase: costing.costPerBase,
-        qbo: qboMeta,
-      };
-    } catch (e) {
-      await batchRef.update({
-        status: "failed",
-        qbo: { error: String(e.message || e) },
-        updatedAt: stamp(),
-      });
-      await logSync(
-        "post-batch",
-        { batchId: batchRef.id, error: e.message },
-        false,
-      );
-      throw e;
-    }
-  });
-
-  const qbChemConnectStart = adminCall(secretsBase, async (_request, account) => {
-    const state = randomBytes(24).toString("hex");
-    await oauthStateRef(state).set({
-      uid: account.uid,
-      createdAt: Date.now(),
-      expiresAt: Date.now() + 15 * 60 * 1000,
-    });
-    const url = qbo.authorizeUrl({
-      clientId: qboClientId.value(),
-      redirectUri: OAUTH_REDIRECT,
-      state,
-    });
-    return { url, redirectUri: OAUTH_REDIRECT };
-  });
-
-  const qbChemEnsureSetup = adminCall(secretsBase, async () => {
-    const settings = await ensureSettings(creds());
-    return { settings: publicSettings(settings) };
-  });
-
-  const qbChemOAuthCallback = onRequest(
-    {
-      region: "us-central1",
-      secrets: [qboClientId, qboClientSecret],
-      cors: false,
-      maxInstances: 2,
-      timeoutSeconds: 60,
-    },
-    async (req, res) => {
-      try {
-        if (req.method !== "GET") {
-          res.status(405).send("Method not allowed");
-          return;
-        }
-        const code = String(req.query.code || "");
-        const state = String(req.query.state || "");
-        const realmId = String(req.query.realmId || "");
-        if (!code || !state || !realmId) {
-          res.status(400).send("Missing OAuth parameters.");
-          return;
-        }
-        const st = await oauthStateRef(state).get();
-        if (!st.exists || st.data().expiresAt < Date.now()) {
-          res.status(400).send("OAuth state expired. Start Connect again.");
-          return;
-        }
-        const tokens = await qbo.exchangeCode({
-          clientId: qboClientId.value(),
-          clientSecret: qboClientSecret.value(),
-          code,
-          redirectUri: OAUTH_REDIRECT,
-        });
-        await qbo.saveConnection({
-          env: "sandbox",
-          realmId,
-          accessToken: tokens.access_token,
-          refreshToken: tokens.refresh_token,
-          expiresAt: Date.now() + (tokens.expires_in || 3600) * 1000,
-          connectedAt: FieldValue.serverTimestamp(),
-          connectedBy: st.data().uid,
-          companyName: null,
-        });
-        await oauthStateRef(state).delete();
-        try {
-          const info = await qbo.getCompanyInfo(
-            {
-              clientId: qboClientId.value(),
-              clientSecret: qboClientSecret.value(),
-            },
-            realmId,
-          );
-          await qbo.saveConnection({
-            companyName: info.CompanyInfo?.CompanyName || null,
-          });
-        } catch {
-          /* optional */
-        }
-        res
-          .status(200)
-          .type("html")
-          .send(
-            "<!doctype html><html><body style=\"font-family:system-ui;padding:2rem\"><h1>QuickBooks connected</h1><p>You can close this tab and return to QB Chem.</p></body></html>",
-          );
-      } catch (e) {
-        console.error("OAuth callback failed", { code: e.code || e.message });
-        res.status(500).send("Could not complete QuickBooks connection.");
-      }
-    },
-  );
-
-  return {
-    qbChemStatus,
-    qbChemUpsertChemical,
-    qbChemUpsertRecipe,
-    qbChemPostBatch,
-    qbChemConnectStart,
-    qbChemEnsureSetup,
-    qbChemOAuthCallback,
-  };
+  await settingsRef().set(next, { merge: true });
+  return next;
 }
-
-function publicSettings(s) {
+async function publicSettings(q) {
+  const s = (await settingsRef().get()).data();
+  if (!s) return null;
+  const names = {};
+  try {
+    for (const a of await q.accounts()) names[a.Id] = a.Name;
+  } catch {
+    /* names are cosmetic */
+  }
+  const acct = (id) => (id ? { id, name: names[id] || `Account ${id}` } : null);
   return {
-    wipAccountId: s.wipAccountId || null,
-    inventoryAssetId: s.inventoryAssetId || null,
-    incomeAccountId: s.incomeAccountId || null,
-    cogsAccountId: s.cogsAccountId || null,
-    ready: Boolean(s.wipAccountId && s.inventoryAssetId),
-  };
-}
-
-function serializeChem(id, d) {
-  return {
-    id,
-    name: d.name,
-    kind: d.kind,
-    baseUnit: d.baseUnit,
-    containerType: d.containerType,
-    containerCapacity: d.containerCapacity,
-    sku: d.sku || "",
-    notes: d.notes || "",
-    purchaseCost: d.purchaseCost ?? 0,
-    unitPrice: d.unitPrice ?? 0,
-    active: d.active !== false,
-    qboItemId: d.qboItemId || null,
-    qtyBaseOnHand: d.qtyBaseOnHand ?? 0,
-    containersOnHand: d.containersOnHand ?? 0,
+    wip: acct(s.wipAccountId),
+    inventoryAsset: acct(s.inventoryAssetId),
+    income: acct(s.incomeAccountId),
+    cogs: acct(s.cogsAccountId),
+    residual: acct(s.residualAccountId),
   };
 }
 
 function serializeRecipe(id, d) {
-  return {
-    id,
-    name: d.name,
-    finishedChemicalId: d.finishedChemicalId,
-    outputQtyBase: d.outputQtyBase,
-    lines: d.lines || [],
-    active: d.active !== false,
-  };
+  return { id, name: d.name, outputItemId: d.outputItemId, outputQty: d.outputQty, lines: d.lines || [], notes: d.notes || "", updatedAt: iso(d.updatedAt) };
 }
-
-function serializeBatch(id, d) {
+function serializeRun(id, d) {
   return {
     id,
+    status: d.status,
     recipeId: d.recipeId,
-    finishedChemicalId: d.finishedChemicalId,
-    outputQtyBase: d.outputQtyBase,
-    outputContainers: d.outputContainers,
+    recipeName: d.recipeName,
+    outputItemId: d.outputItemId,
+    outputName: d.outputName,
+    outputQty: d.outputQty,
     lotNumber: d.lotNumber || "",
     note: d.note || "",
-    status: d.status,
-    costTotal: d.costTotal,
-    costPerBase: d.costPerBase,
-    consumed: d.consumed || [],
+    plan: d.plan || null,
+    result: d.result || null,
     qbo: d.qbo || {},
+    error: d.error || null,
+    createdAt: iso(d.createdAt),
+    postedAt: iso(d.postedAt),
   };
 }
 
-function roundQty(v) {
-  return Math.round(Number(v) * 1e6) / 1e6;
+async function readRecipe(id) {
+  const snap = await recipeCol().doc(docId(id, "Recipe")).get();
+  if (!snap.exists) throw new HttpsError("not-found", "Recipe not found.");
+  return serializeRecipe(snap.id, snap.data());
 }
 
-function docNum(kind, id) {
-  return `QC${kind}${id.replace(/[^a-zA-Z0-9]/g, "").slice(0, 8)}`.slice(0, 21);
+async function acquireLock(uid) {
+  await db().runTransaction(async (tx) => {
+    const cur = (await tx.get(lockRef())).data();
+    if (cur && cur.until > Date.now())
+      throw new HttpsError("aborted", "Another production run is posting. Try again in a minute.");
+    tx.set(lockRef(), { until: Date.now() + 5 * 60 * 1000, by: uid });
+  });
 }
+const releaseLock = () => lockRef().delete();
 
-async function logSync(action, summary, ok) {
-  await syncCol().add({ action, ok, summary, at: stamp() });
-}
+export function createActions(q, account) {
+  return {
+    async load() {
+      const [items, recipes, runs, settings] = await Promise.all([
+        catalog(q),
+        recipeCol().orderBy("name").limit(200).get(),
+        runCol().orderBy("createdAt", "desc").limit(50).get(),
+        publicSettings(q),
+      ]);
+      return {
+        syncedAt: new Date().toISOString(),
+        connection: publicConnection((await db().doc(CONNECTION_DOC).get()).data()),
+        settings,
+        oauthRedirectUri: OAUTH_REDIRECT_URI,
+        items,
+        recipes: recipes.docs.map((d) => serializeRecipe(d.id, d.data())),
+        runs: runs.docs.map((d) => serializeRun(d.id, d.data())),
+      };
+    },
 
-async function ensureSettings(c) {
-  const snap = await settingsRef().get();
-  if (snap.exists && snap.data().wipAccountId && snap.data().inventoryAssetId) {
-    return snap.data();
-  }
-  const accounts = await qbo.qboQuery(
-    c,
-    "select Id, Name, AccountType, AccountSubType from Account maxresults 200",
-  );
-  const list = accounts.QueryResponse?.Account || [];
-  const find = (pred) => list.find(pred);
-  const inventoryAsset = find(
-    (a) => a.AccountSubType === "Inventory" || a.Name === "Inventory Asset",
-  );
-  const income = find(
-    (a) =>
-      a.Name === "Sales of Product Income" ||
-      a.AccountSubType === "SalesOfProductIncome",
-  );
-  const cogs = find(
-    (a) =>
-      a.Name === "Cost of Goods Sold" ||
-      a.AccountSubType === "SuppliesMaterialsCogs",
-  );
-  let wip = find((a) => a.Name === "Production WIP");
-  if (!wip) {
-    const created = await qbo.createAccount(c, {
-      Name: "Production WIP",
-      AccountType: "Other Current Asset",
-      AccountSubType: "OtherCurrentAssets",
-    });
-    wip = created.Account;
-  }
-  if (!inventoryAsset || !income || !cogs) {
-    throw new HttpsError(
-      "failed-precondition",
-      "Sandbox chart of accounts is missing inventory income/COGS accounts.",
-    );
-  }
-  const settings = {
-    wipAccountId: wip.Id,
-    inventoryAssetId: inventoryAsset.Id,
-    incomeAccountId: income.Id,
-    cogsAccountId: cogs.Id,
-    updatedAt: stamp(),
+    async checkName(d) {
+      const items = await catalog(q);
+      return { duplicates: findDuplicates({ name: String(d.name || ""), sku: String(d.sku || "") }, items, { excludeId: d.excludeId || null }) };
+    },
+
+    async createItem(d) {
+      const input = createInput(d);
+      const items = await catalog(q);
+      const duplicates = findDuplicates(input, items);
+      if (duplicates.length && !input.force) return { status: "duplicates", duplicates };
+      const s = await ensureSettings(q);
+      let created;
+      try {
+        created = await q.saveItem({
+          Name: input.name,
+          ...(input.sku ? { Sku: input.sku } : {}),
+          Type: "Inventory",
+          TrackQtyOnHand: true,
+          QtyOnHand: input.startQty,
+          InvStartDate: input.startDate || today(),
+          PurchaseCost: input.purchaseCost,
+          UnitPrice: input.unitPrice,
+          AssetAccountRef: { value: s.inventoryAssetId },
+          IncomeAccountRef: { value: s.incomeAccountId },
+          ExpenseAccountRef: { value: s.cogsAccountId },
+        });
+      } catch (e) {
+        if (isDuplicateName(e))
+          return { status: "duplicates", duplicates: findDuplicates(input, items).filter((m) => m.reason === "exact"), blocked: true };
+        throw e;
+      }
+      const id = String(created.Id);
+      await setupCol().doc(id).set({ ...input.setup, createdAt: stamp(), updatedAt: stamp(), by: account.uid });
+      await log("create-item", true, { itemId: id });
+      return { status: "created", item: mergeCatalog([toItem(created)], { [id]: input.setup })[0] };
+    },
+
+    async saveSetup(d) {
+      const id = qboId(d.itemId);
+      const setup = setupInput(d.setup);
+      let item = await q.getItem(id);
+      if (item.Type !== "Inventory" && item.Type !== "NonInventory")
+        throw new HttpsError("failed-precondition", "Only inventory and non-inventory items can be used in QB Chem.");
+      if (d.reactivate === true && item.Active === false) {
+        item = await q.saveItem({ Id: id, SyncToken: item.SyncToken, sparse: true, Active: true });
+        await log("reactivate-item", true, { itemId: id });
+      }
+      await setupCol().doc(id).set({ ...setup, updatedAt: stamp(), by: account.uid }, { merge: true });
+      await log("save-setup", true, { itemId: id });
+      return { status: "saved", item: mergeCatalog([toItem(item)], { [id]: setup })[0] };
+    },
+
+    async updateItem(d) {
+      const input = updateInput(d);
+      const live = await q.getItem(input.itemId);
+      if (String(live.SyncToken) !== input.syncToken)
+        return { status: "conflict", item: await catalogItem(q, input.itemId) };
+      const current = toItem(live);
+      const changes = {};
+      if (input.fields.name !== undefined && input.fields.name !== current.name) changes.Name = input.fields.name;
+      if (input.fields.sku !== undefined && input.fields.sku !== current.sku) changes.Sku = input.fields.sku;
+      if (input.fields.unitPrice !== undefined && input.fields.unitPrice !== current.unitPrice) changes.UnitPrice = input.fields.unitPrice;
+      if (input.fields.purchaseCost !== undefined && input.fields.purchaseCost !== current.purchaseCost) changes.PurchaseCost = input.fields.purchaseCost;
+      if ((changes.Name || changes.Sku) && !input.force) {
+        const duplicates = findDuplicates({ name: input.fields.name ?? current.name, sku: changes.Sku || "" }, await catalog(q), { excludeId: input.itemId })
+          .filter((m) => changes.Name || m.reason === "sku");
+        if (duplicates.length) return { status: "duplicates", duplicates };
+      }
+      if (Object.keys(changes).length) {
+        try {
+          await q.saveItem({ Id: input.itemId, SyncToken: input.syncToken, sparse: true, ...changes });
+        } catch (e) {
+          if (isStale(e)) return { status: "conflict", item: await catalogItem(q, input.itemId) };
+          if (isDuplicateName(e)) return { status: "duplicates", duplicates: [], blocked: true };
+          throw e;
+        }
+        await log("update-item", true, { itemId: input.itemId, fields: Object.keys(changes) });
+      }
+      if (input.setup) await setupCol().doc(input.itemId).set({ ...input.setup, updatedAt: stamp(), by: account.uid }, { merge: true });
+      return { status: "saved", item: await catalogItem(q, input.itemId) };
+    },
+
+    async saveRecipe(d) {
+      const input = recipeInput(d);
+      const byId = Object.fromEntries((await catalog(q)).map((i) => [i.id, i]));
+      const check = (id, label) => {
+        const i = byId[id];
+        if (!i || i.type !== "Inventory" || !i.trackQty)
+          throw new HttpsError("failed-precondition", `${label} must be a quantity-tracked inventory item in QuickBooks.`);
+        if (!i.active) throw new HttpsError("failed-precondition", `${i.name} is inactive in QuickBooks.`);
+      };
+      check(input.outputItemId, "The finished product");
+      input.lines.forEach((l, n) => check(l.itemId, `Input ${n + 1}`));
+      const ref = input.id ? recipeCol().doc(input.id) : recipeCol().doc();
+      if (input.id && !(await ref.get()).exists) throw new HttpsError("not-found", "Recipe not found.");
+      const { id: _ignored, ...doc } = input;
+      void _ignored;
+      await ref.set({ ...doc, updatedAt: stamp(), by: account.uid, ...(input.id ? {} : { createdAt: stamp() }) }, { merge: true });
+      return { recipe: serializeRecipe(ref.id, (await ref.get()).data()) };
+    },
+
+    async deleteRecipe(d) {
+      const ref = recipeCol().doc(docId(d.id, "Recipe"));
+      await ref.delete();
+      return { deleted: ref.id };
+    },
+
+    async previewRun(d) {
+      const recipe = await readRecipe(d.recipeId);
+      const outputQty = runInput({ ...d, requestId: "00000000-0000-0000-0000-000000000000" }).outputQty;
+      const byId = Object.fromEntries((await catalog(q)).map((i) => [i.id, i]));
+      return { plan: planRun(recipe, outputQty, byId), recipe };
+    },
+
+    async postRun(d) {
+      const input = runInput(d);
+      const id = createHash("sha256").update(`run:${input.requestId}`).digest("hex").slice(0, 24);
+      const ref = runCol().doc(id);
+      const prior = await ref.get();
+      if (prior.exists) return { run: serializeRun(id, prior.data()), repeated: true };
+      const recipe = await readRecipe(input.recipeId);
+      const items = await catalog(q);
+      const byId = Object.fromEntries(items.map((i) => [i.id, i]));
+      const plan = planRun(recipe, input.outputQty, byId);
+      if (!plan.ok) throw new HttpsError("failed-precondition", plan.problems.join(" "));
+      const s = await ensureSettings(q);
+      await acquireLock(account.uid);
+      try {
+        try {
+          await ref.create({
+            status: "posting",
+            recipeId: recipe.id,
+            recipeName: recipe.name,
+            outputItemId: recipe.outputItemId,
+            outputName: plan.outputName,
+            outputQty: plan.outputQty,
+            lotNumber: input.lotNumber,
+            note: input.note,
+            plan,
+            qbo: {},
+            createdAt: stamp(),
+            createdBy: account.uid,
+          });
+        } catch {
+          return { run: serializeRun(id, (await ref.get()).data()), repeated: true };
+        }
+        const date = today();
+        const tag = `QB Chem run ${id.slice(0, 8)} · ${recipe.name}${input.lotNumber ? ` · lot ${input.lotNumber}` : ""}`;
+        const doc = (suffix) => `QC${id.slice(0, 6).toUpperCase()}-${suffix}`;
+        const wipBalance = async () => Number((await q.getAccount(s.wipAccountId)).CurrentBalance || 0);
+        const qboIds = {};
+        try {
+          const wipBefore = await wipBalance();
+          const consume = await q.createAdjustment({
+            DocNumber: doc("C"),
+            TxnDate: date,
+            AdjustAccountRef: { value: s.wipAccountId },
+            PrivateNote: `${tag} · consume inputs`,
+            Line: plan.lines.map((l) => ({
+              DetailType: "ItemAdjustmentLineDetail",
+              ItemAdjustmentLineDetail: { ItemRef: { value: l.itemId }, QtyDiff: -l.qty },
+            })),
+          });
+          qboIds.consumeAdjustmentId = String(consume.Id);
+          await ref.update({ qbo: qboIds });
+          const consumed = settleRun({ wipBefore, wipAfterConsume: await wipBalance(), outputQty: plan.outputQty });
+
+          const fg = await q.getItem(recipe.outputItemId);
+          await q.saveItem({ Id: fg.Id, SyncToken: fg.SyncToken, sparse: true, PurchaseCost: consumed.unitCost });
+          const produce = await q.createAdjustment({
+            DocNumber: doc("P"),
+            TxnDate: date,
+            AdjustAccountRef: { value: s.wipAccountId },
+            PrivateNote: `${tag} · produce finished product at ${consumed.unitCost}/unit`,
+            Line: [{ DetailType: "ItemAdjustmentLineDetail", ItemAdjustmentLineDetail: { ItemRef: { value: recipe.outputItemId }, QtyDiff: plan.outputQty } }],
+          });
+          qboIds.produceAdjustmentId = String(produce.Id);
+          await ref.update({ qbo: qboIds });
+
+          const wipAfterConsume = wipBefore + consumed.actualCost;
+          const settled = settleRun({ wipBefore, wipAfterConsume, wipAfterProduce: await wipBalance(), outputQty: plan.outputQty });
+          const jeLines = residualJournalLines(settled.residual, s.wipAccountId, s.residualAccountId, `${tag} · clear WIP rounding`);
+          if (jeLines.length) {
+            const je = await q.createJournal({ DocNumber: doc("R"), TxnDate: date, PrivateNote: `${tag} · clear WIP rounding`, Line: jeLines });
+            qboIds.journalEntryId = String(je.Id);
+          }
+          const wipAfter = await wipBalance();
+          const after = await Promise.all([recipe.outputItemId, ...plan.lines.map((l) => l.itemId)].map((i) => q.getItem(i)));
+          const result = {
+            actualCost: settled.actualCost,
+            unitCost: settled.unitCost,
+            valueIn: settled.valueIn,
+            residual: settled.residual,
+            wipBefore,
+            wipAfter,
+            qtyAfter: Object.fromEntries(after.map((i) => [String(i.Id), Number(i.QtyOnHand ?? 0)])),
+          };
+          await ref.update({ status: "posted", qbo: qboIds, result, postedAt: stamp() });
+          await log("post-run", true, { runId: id, ...qboIds, actualCost: result.actualCost });
+          return { run: serializeRun(id, (await ref.get()).data()) };
+        } catch (e) {
+          const message = e instanceof QboError ? `QuickBooks: ${e.detail}` : "Posting stopped unexpectedly.";
+          await ref.update({ status: "failed", qbo: qboIds, error: `${message} QuickBooks records already created are listed on this run; review them before retrying.` });
+          await log("post-run", false, { runId: id, ...qboIds });
+          throw e;
+        }
+      } finally {
+        await releaseLock();
+      }
+    },
+
+    async ensureSetup() {
+      await ensureSettings(q);
+      return { settings: await publicSettings(q) };
+    },
+
+    async connectStart() {
+      const state = randomBytes(24).toString("hex");
+      await stateRef(state).set({ uid: account.uid, expiresAt: Date.now() + 15 * 60 * 1000 });
+      return { url: authorizeUrl({ clientId: clientIdSecret.value(), redirectUri: OAUTH_REDIRECT_URI, state }), redirectUri: OAUTH_REDIRECT_URI };
+    },
   };
-  await settingsRef().set(settings, { merge: true });
-  return settings;
 }
 
-void call;
+export const ACTIONS = ["load", "checkName", "createItem", "saveSetup", "updateItem", "saveRecipe", "deleteRecipe", "previewRun", "postRun", "ensureSetup", "connectStart"];
+
+export function createQbChemHandlers({ endpoint, base, current }) {
+  const qbChemApi = endpoint(
+    { ...base, secrets: [clientIdSecret, clientSecretSecret], timeoutSeconds: 120, memory: "512MiB" },
+    async (request) => {
+      const account = await current(request, true);
+      const action = request.data?.action;
+      if (!ACTIONS.includes(action)) throw new HttpsError("invalid-argument", "Unknown QB Chem action.");
+      try {
+        const q = createQbo({ db: db(), clientId: clientIdSecret.value(), clientSecret: clientSecretSecret.value() });
+        return await createActions(q, account)[action](request.data.payload || {});
+      } catch (e) {
+        throw toHttps(e);
+      }
+    },
+  );
+
+  const qbChemOAuthCallback = onRequest(
+    { region: "us-central1", secrets: [clientIdSecret, clientSecretSecret], maxInstances: 2, timeoutSeconds: 60, memory: "256MiB" },
+    async (req, res) => {
+      const page = (title, body, status = 200) =>
+        res
+          .status(status)
+          .set("Cache-Control", "no-store")
+          .type("html")
+          .send(`<!doctype html><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title}</title><body style="font-family:system-ui;background:#080d16;color:#e8edf5;display:grid;place-items:center;min-height:100vh;margin:0"><main style="max-width:420px;padding:32px;text-align:center"><h1 style="font-weight:500">${title}</h1><p style="color:#93a5bd">${body}</p></main></body>`);
+      try {
+        const code = String(req.query.code || "");
+        const state = String(req.query.state || "");
+        const realmId = String(req.query.realmId || "");
+        if (req.method !== "GET" || !/^[a-f0-9]{48}$/.test(state) || !code || !/^[0-9]{1,20}$/.test(realmId))
+          return page("Connection not completed", "Start again from QB Chem → Settings.", 400);
+        const st = await stateRef(state).get();
+        await stateRef(state).delete();
+        if (!st.exists || st.data().expiresAt < Date.now())
+          return page("Link expired", "Start again from QB Chem → Settings.", 400);
+        const creds = { clientId: clientIdSecret.value(), clientSecret: clientSecretSecret.value() };
+        const t = await exchangeCode(creds, code, OAUTH_REDIRECT_URI);
+        await db().doc(CONNECTION_DOC).set({
+          env: "sandbox",
+          realmId,
+          accessToken: t.access_token,
+          refreshToken: t.refresh_token,
+          expiresAt: Date.now() + (t.expires_in || 3600) * 1000,
+          connectedAt: stamp(),
+          connectedBy: st.data().uid,
+          companyName: null,
+        });
+        try {
+          const info = await createQbo({ db: db(), ...creds }).companyInfo(realmId);
+          await db().doc(CONNECTION_DOC).update({ companyName: info?.CompanyName || null });
+        } catch {
+          /* company name is cosmetic */
+        }
+        await log("connect", true, { realmId });
+        return page("QuickBooks connected", "You can close this tab and return to QB Chem.");
+      } catch (e) {
+        console.error("QuickBooks OAuth callback failed", { code: e?.message || "unknown" });
+        return page("Connection failed", "QuickBooks did not accept the connection. Try again from QB Chem → Settings.", 500);
+      }
+    },
+  );
+
+  return { qbChemApi, qbChemOAuthCallback };
+}
+

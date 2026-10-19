@@ -1,113 +1,168 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {
-  containersFromBase,
-  baseFromContainers,
-  scaleRecipe,
-  costBatch,
-  residualToClear,
-  money,
-} from "../qbchem/costing.js";
-import {
-  chemicalInput,
-  recipeInput,
-  batchInput,
-} from "../qbchem/policy.js";
+import { createInput, updateInput, setupInput, recipeInput, runInput, InputError } from "../qbchem/policy.js";
+import { toItem, mergeCatalog, findDuplicates, similarity } from "../qbchem/catalog.js";
+import { scaleRecipe, planRun, settleRun, residualJournalLines, unitCost, money } from "../qbchem/costing.js";
+import { createQbo, QboError, isStale, isDuplicateName, publicConnection } from "../qbchem/qbo.js";
+import { ACTIONS } from "../qbchem/service.js";
 
-test("containersFromBase floors whole containers and reports remainder", () => {
-  assert.deepEqual(containersFromBase(410, 205), {
-    containers: 2,
-    remainderBase: 0,
-    qtyBase: 410,
-  });
-  assert.deepEqual(containersFromBase(220, 205), {
-    containers: 1,
-    remainderBase: 15,
-    qtyBase: 220,
-  });
-  assert.throws(() => containersFromBase(-1, 205));
-  assert.throws(() => containersFromBase(10, 0));
+const setup = { role: "raw", baseUnit: "L", containerType: "drum", containerCapacity: 205 };
+const item = (id, name, extra = {}) => ({ id, name, sku: "", type: "Inventory", active: true, trackQty: true, qtyOnHand: 0, purchaseCost: 0, unitPrice: 0, syncToken: "0", ...extra });
+
+test("setup extras accept only known roles, units and containers", () => {
+  assert.deepEqual(setupInput(setup), { ...setup, notes: "" });
+  assert.throws(() => setupInput({ ...setup, baseUnit: "gal" }), InputError);
+  assert.throws(() => setupInput({ ...setup, containerType: "bag" }), InputError);
+  assert.throws(() => setupInput({ ...setup, containerCapacity: 0 }), /greater than/);
+  assert.throws(() => setupInput({ ...setup, containerCapacity: "205" }), /number/);
 });
 
-test("baseFromContainers multiplies cleanly", () => {
-  assert.equal(baseFromContainers(3, 1000), 3000);
-  assert.throws(() => baseFromContainers(1.5, 1000));
+test("create input validates QuickBooks-safe names and starting stock", () => {
+  const c = createInput({ name: " Methanol ", sku: "MEOH", unitPrice: 0, purchaseCost: 1.25, startQty: 410, startDate: "2026-10-19", setup });
+  assert.equal(c.name, "Methanol");
+  assert.equal(c.force, false);
+  assert.throws(() => createInput({ name: "Parent:Child", setup }), /sub-items/);
+  assert.throws(() => createInput({ name: "", setup }), /required/);
+  assert.throws(() => createInput({ name: "X", startQty: -1, setup }), /at least 0/);
+  assert.throws(() => createInput({ name: "X", startDate: "19/10/2026", setup }), /date/);
 });
 
-test("scaleRecipe scales lines by output ratio", () => {
-  const recipe = {
-    outputQtyBase: 1000,
-    lines: [
-      { chemicalId: "a", qtyBase: 800 },
-      { chemicalId: "b", qtyBase: 20 },
-    ],
-  };
-  const scaled = scaleRecipe(recipe, 500);
-  assert.equal(scaled.factor, 0.5);
-  assert.equal(scaled.lines[0].qtyBase, 400);
-  assert.equal(scaled.lines[1].qtyBase, 10);
-  assert.throws(() => scaleRecipe(recipe, 0));
+test("update input is partial, needs the QuickBooks SyncToken and a numeric id", () => {
+  const u = updateInput({ itemId: "33", syncToken: "4", fields: { name: "CI-100" } });
+  assert.deepEqual(u.fields, { name: "CI-100" });
+  assert.equal(u.setup, null);
+  assert.throws(() => updateInput({ itemId: "abc", syncToken: "1", fields: {} }), /id is invalid/);
+  assert.throws(() => updateInput({ itemId: "33", fields: {} }), /Sync token/);
 });
 
-test("costBatch totals line costs and unit finished cost", () => {
-  const costing = costBatch(
-    [
-      { chemicalId: "a", qtyBase: 800 },
-      { chemicalId: "b", qtyBase: 20 },
-    ],
-    { a: 1.25, b: 10 },
-    1000,
+test("recipes link by QuickBooks id, reject duplicate inputs and self-reference", () => {
+  const r = recipeInput({ name: "CI-100", outputItemId: "35", outputQty: 1000, lines: [{ itemId: "33", qty: 800 }, { itemId: "34", qty: 20 }] });
+  assert.equal(r.lines.length, 2);
+  assert.throws(() => recipeInput({ name: "R", outputItemId: "35", outputQty: 1000, lines: [] }), /at least one/);
+  assert.throws(() => recipeInput({ name: "R", outputItemId: "35", outputQty: 1, lines: [{ itemId: "33", qty: 1 }, { itemId: "33", qty: 2 }] }), /only once/);
+  assert.throws(() => recipeInput({ name: "R", outputItemId: "35", outputQty: 1, lines: [{ itemId: "35", qty: 1 }] }), /cannot also be an input/);
+  assert.throws(() => recipeInput({ name: "R", outputItemId: "Methanol", outputQty: 1, lines: [{ itemId: "33", qty: 1 }] }), /id is invalid/);
+});
+
+test("runs need a UUID request id and a safe lot number", () => {
+  const ok = runInput({ recipeId: "abc123", outputQty: 500, lotNumber: "L-2026/10.1", requestId: "123e4567-e89b-42d3-a456-426614174000" });
+  assert.equal(ok.lotNumber, "L-2026/10.1");
+  assert.throws(() => runInput({ recipeId: "abc", outputQty: 1, requestId: "x" }), /Request id/);
+  assert.throws(() => runInput({ recipeId: "abc", outputQty: 1, lotNumber: "<script>", requestId: "123e4567-e89b-42d3-a456-426614174000" }), /Lot number/);
+  assert.throws(() => runInput({ recipeId: "a/b", outputQty: 1, requestId: "123e4567-e89b-42d3-a456-426614174000" }), /Recipe/);
+});
+
+test("catalog merges setup strictly by QuickBooks id and flags items needing setup", () => {
+  const rows = mergeCatalog(
+    [toItem({ Id: 33, Name: "Methanol", Type: "Inventory", TrackQtyOnHand: true, QtyOnHand: 410, PurchaseCost: 1.25, SyncToken: 2 }), toItem({ Id: 31, Name: "Ether", Type: "Inventory", Active: false, SyncToken: 0 })],
+    { 33: setup, Methanol: { ...setup, baseUnit: "kg" } },
   );
-  assert.equal(costing.costTotal, 1200);
-  assert.equal(costing.costPerBase, 1.2);
-  assert.equal(costing.consumed[0].cost, 1000);
-  assert.equal(costing.consumed[1].cost, 200);
+  assert.equal(rows[0].id, "33");
+  assert.equal(rows[0].status, "ready");
+  assert.equal(rows[0].setup.baseUnit, "L");
+  assert.equal(rows[0].syncToken, "2");
+  assert.equal(rows[1].status, "needs-setup");
+  assert.equal(rows[1].active, false);
 });
 
-test("residualToClear rounds money", () => {
-  assert.equal(residualToClear(0.004), 0);
-  assert.equal(residualToClear(1.235), 1.24);
+test("duplicate check finds exact, SKU and similar names including inactive items", () => {
+  const items = [
+    item("28", "UX Methanol (deleted)", { active: false }),
+    item("29", "Surfactant Blend Base", { sku: "SURF-1" }),
+    item("30", "Corrosion Inhibitor CI-100"),
+    item("21", "Name Badges"),
+  ];
+  const m = findDuplicates({ name: "methanol", sku: "" }, items);
+  assert.equal(m[0].id, "28");
+  assert.equal(m[0].active, false);
+  assert.equal(findDuplicates({ name: "Corrosion Inhibitor CI-100", sku: "" }, items)[0].reason, "exact");
+  assert.equal(findDuplicates({ name: "CI-100 Corrosion Inhibitor", sku: "" }, items)[0].reason, "similar");
+  assert.equal(findDuplicates({ name: "Totally New", sku: "surf-1" }, items)[0].reason, "sku");
+  assert.deepEqual(findDuplicates({ name: "Glycol", sku: "" }, items), []);
+  assert.deepEqual(findDuplicates({ name: "Name Badges", sku: "" }, items, { excludeId: "21" }), []);
+  assert.ok(similarity("Methanol", "Methanoll") > 0.85);
+});
+
+test("recipe scaling and run plan use live QuickBooks quantities and costs", () => {
+  const recipe = { outputItemId: "35", outputQty: 1000, lines: [{ itemId: "33", qty: 800 }, { itemId: "34", qty: 20 }] };
+  assert.deepEqual(scaleRecipe(recipe, 500), [{ itemId: "33", qty: 400 }, { itemId: "34", qty: 10 }]);
+  const byId = {
+    33: item("33", "Methanol", { qtyOnHand: 1025, purchaseCost: 1.25 }),
+    34: item("34", "Surfactant Base", { qtyOnHand: 100, purchaseCost: 8.5 }),
+    35: item("35", "CI-100", { qtyOnHand: 0 }),
+  };
+  const plan = planRun(recipe, 1000, byId);
+  assert.equal(plan.ok, true);
+  assert.equal(plan.estTotal, 1170);
+  assert.equal(plan.estUnitCost, 1.17);
+  assert.equal(plan.lines[0].after, 225);
+  assert.equal(plan.finishedAfter, 1000);
+  const short = planRun(recipe, 2000, byId);
+  assert.equal(short.ok, false);
+  assert.match(short.problems[0], /Not enough Methanol: needs 1600, 1025 on hand/);
+  const inactive = planRun(recipe, 10, { ...byId, 35: { ...byId[35], active: false } });
+  assert.match(inactive.problems[0], /finished product/);
+});
+
+test("settlement reads actual cost from WIP and computes the rounding residual", () => {
+  const s = settleRun({ wipBefore: 0, wipAfterConsume: 1170, wipAfterProduce: 0, outputQty: 1000 });
+  assert.deepEqual(s, { actualCost: 1170, unitCost: 1.17, valueIn: 1170, residual: 0 });
+  const odd = settleRun({ wipBefore: 10, wipAfterConsume: 110, wipAfterProduce: 10.03, outputQty: 3 });
+  assert.equal(odd.unitCost, 33.3333);
+  assert.equal(odd.residual, 0.03);
+  assert.equal(odd.valueIn, 99.97);
+  assert.equal(unitCost(1 / 3), 0.3333);
   assert.equal(money(1.005), 1.01);
 });
 
-test("chemicalInput validates kind, unit and container", () => {
-  const c = chemicalInput({
-    name: " Methanol ",
-    kind: "raw",
-    baseUnit: "L",
-    containerType: "drum",
-    containerCapacity: 205,
-    purchaseCost: 1.5,
-    unitPrice: 0,
-  });
-  assert.equal(c.name, "Methanol");
-  assert.throws(() =>
-    chemicalInput({
-      name: "X",
-      kind: "blend",
-      baseUnit: "L",
-      containerType: "drum",
-      containerCapacity: 1,
-    }),
-  );
+test("residual journal entry always nets WIP back to zero", () => {
+  assert.deepEqual(residualJournalLines(0.004, "W", "I", "m"), []);
+  const pos = residualJournalLines(0.03, "W", "I", "m");
+  assert.deepEqual(pos.map((l) => [l.JournalEntryLineDetail.PostingType, l.JournalEntryLineDetail.AccountRef.value, l.Amount]), [["Credit", "W", 0.03], ["Debit", "I", 0.03]]);
+  const neg = residualJournalLines(-0.02, "W", "I", "m");
+  assert.deepEqual(neg.map((l) => l.JournalEntryLineDetail.PostingType), ["Debit", "Credit"]);
 });
 
-test("recipeInput and batchInput reject empty lines and bad ids", () => {
-  assert.throws(() =>
-    recipeInput({
-      name: "R",
-      finishedChemicalId: "f1",
-      outputQtyBase: 1000,
-      lines: [],
-    }),
-  );
-  const r = recipeInput({
-    name: "R",
-    finishedChemicalId: "f1",
-    outputQtyBase: 1000,
-    lines: [{ chemicalId: "a", qtyBase: 10 }],
-  });
-  assert.equal(r.lines.length, 1);
-  assert.equal(batchInput({ recipeId: "r1", outputQtyBase: 100 }).recipeId, "r1");
-  assert.throws(() => batchInput({ recipeId: "", outputQtyBase: 100 }));
+function fakeDb(conn) {
+  const doc = { data: conn };
+  const ref = { get: async () => ({ data: () => doc.data }), update: async (v) => (doc.data = { ...doc.data, ...v }) };
+  return {
+    doc: () => ref,
+    runTransaction: async (fn) => fn({ get: ref.get, update: (_r, v) => (doc.data = { ...doc.data, ...v }) }),
+    state: doc,
+  };
+}
+
+test("QuickBooks client rotates the refresh token into Firestore and maps errors", async () => {
+  const db = fakeDb({ realmId: "9341458521176413", env: "sandbox", refreshToken: "r1", accessToken: "old", expiresAt: 0 });
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push(url);
+    if (url.includes("oauth2")) return new Response(JSON.stringify({ access_token: "a2", refresh_token: "r2", expires_in: 3600 }));
+    assert.equal(init.headers.Authorization, "Bearer a2");
+    if (url.includes("item/9")) return new Response(JSON.stringify({ Fault: { Error: [{ code: "5010", Detail: "Stale Object Error" }] } }), { status: 400 });
+    return new Response(JSON.stringify({ Item: { Id: "1" } }));
+  };
+  const q = createQbo({ db, clientId: "id", clientSecret: "s", fetchImpl });
+  assert.equal((await q.getItem("1")).Id, "1");
+  assert.equal(db.state.data.refreshToken, "r2");
+  assert.equal(db.state.data.accessToken, "a2");
+  assert.ok(calls[1].startsWith("https://sandbox-quickbooks.api.intuit.com/v3/company/9341458521176413/item/1?minorversion=75"));
+  await q.getItem("1");
+  assert.equal(calls.filter((u) => u.includes("oauth2")).length, 1);
+  const err = await q.getItem("9").catch((e) => e);
+  assert.ok(err instanceof QboError && isStale(err) && !isDuplicateName(err));
+  await assert.rejects(createQbo({ db: fakeDb({}), clientId: "i", clientSecret: "s", fetchImpl }).getItem("1"), /qbo-not-connected/);
+});
+
+test("public connection never exposes tokens and the action list is fixed", () => {
+  const p = publicConnection({ realmId: "1", refreshToken: "secret", accessToken: "secret", env: "sandbox", companyName: "Co" });
+  assert.equal(JSON.stringify(p).includes("secret"), false);
+  assert.equal(p.connected, true);
+  assert.ok(ACTIONS.includes("postRun") && !ACTIONS.includes("__proto__"));
+});
+
+test("similarity flags names whose words are all contained in another name", () => {
+  assert.ok(similarity("Surfactant Base", "UX Surfactant Blend Base (deleted)") >= 0.75);
+  assert.ok(similarity("Caustic Soda", "Citric Acid") < 0.75);
 });

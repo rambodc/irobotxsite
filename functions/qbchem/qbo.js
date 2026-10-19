@@ -1,236 +1,129 @@
-/**
- * QuickBooks Online client for QB Chem.
- * Token owner: Firestore qbChem/_meta/qboConnection (Functions refreshes & writes).
- * Client id/secret: Secret Manager via defineSecret values passed in.
- */
-import { getFirestore, FieldValue } from "firebase-admin/firestore";
-
+// QuickBooks Online REST client. Tokens live ONLY in Firestore
+// qbChemConfig/connection; refresh happens inside a transaction so the rotated
+// refresh token is written back exactly once (single token owner).
 const TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
 const AUTH_URL = "https://appcenter.intuit.com/connect/oauth2";
-const MINOR = 75;
+const MINOR_VERSION = 75;
+const API = {
+  sandbox: "https://sandbox-quickbooks.api.intuit.com",
+  production: "https://quickbooks.api.intuit.com",
+};
+export const CONNECTION_DOC = "qbChemConfig/connection";
 
-const baseFor = (env) =>
-  env === "production"
-    ? "https://quickbooks.api.intuit.com"
-    : "https://sandbox-quickbooks.api.intuit.com";
+export class QboError extends Error {
+  constructor(status, body) {
+    super("qbo-api-error");
+    const e = body?.Fault?.Error?.[0];
+    this.status = status;
+    this.qboCode = e?.code || null;
+    this.detail = String(e?.Detail || e?.Message || `HTTP ${status}`).slice(0, 300);
+  }
+}
+export const isStale = (e) => e instanceof QboError && e.qboCode === "5010";
+export const isDuplicateName = (e) => e instanceof QboError && e.qboCode === "6240";
 
-const connRef = () =>
-  getFirestore().doc("qbChemConfig/connection");
-
-export function authorizeUrl({ clientId, redirectUri, state, scope = "com.intuit.quickbooks.accounting" }) {
-  const q = new URLSearchParams({
+export function authorizeUrl({ clientId, redirectUri, state }) {
+  return `${AUTH_URL}?${new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope,
+    scope: "com.intuit.quickbooks.accounting",
     state,
-  });
-  return `${AUTH_URL}?${q}`;
+  })}`;
 }
 
-export async function exchangeCode({
-  clientId,
-  clientSecret,
-  code,
-  redirectUri,
-}) {
-  const body = new URLSearchParams({
-    grant_type: "authorization_code",
-    code,
-    redirect_uri: redirectUri,
-  });
-  return tokenRequest(clientId, clientSecret, body);
+export function publicConnection(c) {
+  return c?.refreshToken && c?.realmId
+    ? { connected: true, env: c.env || "sandbox", realmId: c.realmId, companyName: c.companyName || null }
+    : { connected: false, env: null, realmId: null, companyName: null };
 }
 
-async function tokenRequest(clientId, clientSecret, body) {
-  const auth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
-  const res = await fetch(TOKEN_URL, {
+async function tokenCall({ clientId, clientSecret, fetchImpl }, params) {
+  const res = await fetchImpl(TOKEN_URL, {
     method: "POST",
     headers: {
-      Authorization: `Basic ${auth}`,
+      Authorization: `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`,
       Accept: "application/json",
       "Content-Type": "application/x-www-form-urlencoded",
     },
-    body,
+    body: new URLSearchParams(params),
     signal: AbortSignal.timeout(20000),
   });
   if (!res.ok) {
-    const err = new Error("qbo-token-failed");
-    err.code = `qbo-${res.status}`;
+    const err = new Error(res.status === 400 ? "qbo-reauth" : "qbo-token-failed");
+    err.status = res.status;
     throw err;
   }
   return res.json();
 }
 
-export async function saveConnection(partial) {
-  const ref = connRef();
-  await ref.set(
-    {
-      ...partial,
-      updatedAt: FieldValue.serverTimestamp(),
-    },
-    { merge: true },
-  );
+export function exchangeCode(creds, code, redirectUri) {
+  return tokenCall({ fetchImpl: fetch, ...creds }, { grant_type: "authorization_code", code, redirect_uri: redirectUri });
 }
 
-export async function getConnection() {
-  const snap = await connRef().get();
-  if (!snap.exists) return null;
-  return snap.data();
-}
+export function createQbo({ db, clientId, clientSecret, fetchImpl = fetch }) {
+  const ref = db.doc(CONNECTION_DOC);
+  const fresh = (c) => c?.accessToken && Date.now() < Number(c.expiresAt) - 300000;
 
-/** Public-safe connection status (no tokens). */
-export function publicConnection(data) {
-  if (!data) return { connected: false };
+  async function session() {
+    const c = (await ref.get()).data();
+    if (!c?.refreshToken || !c?.realmId) throw new Error("qbo-not-connected");
+    if (fresh(c)) return c;
+    return db.runTransaction(async (tx) => {
+      const cur = (await tx.get(ref)).data();
+      if (fresh(cur)) return cur;
+      const t = await tokenCall({ clientId, clientSecret, fetchImpl }, {
+        grant_type: "refresh_token",
+        refresh_token: cur.refreshToken,
+      });
+      const next = {
+        accessToken: t.access_token,
+        refreshToken: t.refresh_token || cur.refreshToken,
+        expiresAt: Date.now() + (t.expires_in || 3600) * 1000,
+        refreshedAt: new Date().toISOString(),
+      };
+      tx.update(ref, next);
+      return { ...cur, ...next };
+    });
+  }
+
+  async function request(method, path, body) {
+    const c = await session();
+    const sep = path.includes("?") ? "&" : "?";
+    const res = await fetchImpl(
+      `${API[c.env === "production" ? "production" : "sandbox"]}/v3/company/${c.realmId}/${path}${sep}minorversion=${MINOR_VERSION}`,
+      {
+        method,
+        headers: { Authorization: `Bearer ${c.accessToken}`, Accept: "application/json", "Content-Type": "application/json" },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: AbortSignal.timeout(30000),
+      },
+    );
+    const text = await res.text();
+    let json = {};
+    try {
+      json = text ? JSON.parse(text) : {};
+    } catch {
+      json = {};
+    }
+    if (!res.ok) throw new QboError(res.status, json);
+    return json;
+  }
+
+  const query = async (sql) => (await request("GET", `query?query=${encodeURIComponent(sql)}`)).QueryResponse || {};
   return {
-    connected: Boolean(data.refreshToken && data.realmId),
-    env: data.env || "sandbox",
-    realmId: data.realmId || null,
-    companyName: data.companyName || null,
-    connectedAt: data.connectedAt || null,
+    session,
+    request,
+    query,
+    items: async () =>
+      (await query("select * from Item where Active in (true, false) and Type in ('Inventory', 'NonInventory') maxresults 1000")).Item || [],
+    getItem: async (id) => (await request("GET", `item/${id}`)).Item,
+    saveItem: async (body) => (await request("POST", "item", body)).Item,
+    getAccount: async (id) => (await request("GET", `account/${id}`)).Account,
+    accounts: async () => (await query("select * from Account maxresults 1000")).Account || [],
+    createAccount: async (body) => (await request("POST", "account", body)).Account,
+    createAdjustment: async (body) => (await request("POST", "inventoryadjustment", body)).InventoryAdjustment,
+    createJournal: async (body) => (await request("POST", "journalentry", body)).JournalEntry,
+    companyInfo: async (realmId) => (await request("GET", `companyinfo/${realmId}`)).CompanyInfo,
   };
-}
-
-async function refreshIfNeeded(clientId, clientSecret, conn) {
-  const skewMs = 5 * 60 * 1000;
-  if (
-    conn.accessToken &&
-    conn.expiresAt &&
-    Date.now() < Number(conn.expiresAt) - skewMs
-  ) {
-    return conn;
-  }
-  if (!conn.refreshToken) throw new Error("qbo-not-connected");
-  const tokens = await tokenRequest(
-    clientId,
-    clientSecret,
-    new URLSearchParams({
-      grant_type: "refresh_token",
-      refresh_token: conn.refreshToken,
-    }),
-  );
-  const next = {
-    accessToken: tokens.access_token,
-    refreshToken: tokens.refresh_token || conn.refreshToken,
-    expiresAt: Date.now() + (tokens.expires_in || 3600) * 1000,
-    tokenType: tokens.token_type || "bearer",
-  };
-  await saveConnection(next);
-  return { ...conn, ...next };
-}
-
-export async function qboCall({
-  clientId,
-  clientSecret,
-  method = "GET",
-  path,
-  body,
-}) {
-  let conn = await getConnection();
-  if (!conn?.realmId) throw new Error("qbo-not-connected");
-  conn = await refreshIfNeeded(clientId, clientSecret, conn);
-  const base = baseFor(conn.env || "sandbox");
-  const sep = path.includes("?") ? "&" : "?";
-  const url = `${base}/v3/company/${conn.realmId}/${path}${sep}minorversion=${MINOR}`;
-  const res = await fetch(url, {
-    method,
-    headers: {
-      Authorization: `Bearer ${conn.accessToken}`,
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
-    body: body != null ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(30000),
-  });
-  const text = await res.text();
-  let json;
-  try {
-    json = text ? JSON.parse(text) : {};
-  } catch {
-    json = { raw: text };
-  }
-  if (!res.ok) {
-    const err = new Error("qbo-api-error");
-    err.status = res.status;
-    err.body = json;
-    throw err;
-  }
-  return json;
-}
-
-export async function qboQuery(creds, query) {
-  return qboCall({
-    ...creds,
-    method: "GET",
-    path: `query?query=${encodeURIComponent(query)}`,
-  });
-}
-
-export async function createInventoryAdjustment(creds, payload) {
-  return qboCall({
-    ...creds,
-    method: "POST",
-    path: "inventoryadjustment",
-    body: payload,
-  });
-}
-
-export async function createJournalEntry(creds, payload) {
-  return qboCall({
-    ...creds,
-    method: "POST",
-    path: "journalentry",
-    body: payload,
-  });
-}
-
-export async function createAccount(creds, payload) {
-  return qboCall({
-    ...creds,
-    method: "POST",
-    path: "account",
-    body: payload,
-  });
-}
-
-export async function createItem(creds, payload) {
-  return qboCall({
-    ...creds,
-    method: "POST",
-    path: "item",
-    body: payload,
-  });
-}
-
-export async function updateItem(creds, payload) {
-  return qboCall({
-    ...creds,
-    method: "POST",
-    path: "item",
-    body: payload,
-  });
-}
-
-export async function getItem(creds, id) {
-  return qboCall({
-    ...creds,
-    method: "GET",
-    path: `item/${id}`,
-  });
-}
-
-export async function getAccount(creds, id) {
-  return qboCall({
-    ...creds,
-    method: "GET",
-    path: `account/${id}`,
-  });
-}
-
-export async function getCompanyInfo(creds, realmId) {
-  return qboCall({
-    ...creds,
-    method: "GET",
-    path: `companyinfo/${realmId}`,
-  });
 }

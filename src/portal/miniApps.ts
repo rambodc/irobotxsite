@@ -28,7 +28,7 @@ export const MINI_APPS: MiniApp[] = [
   {
     id: "qb-chem",
     label: "QB Chem",
-    description: "Chemical inventory, recipes and production batches synced to QuickBooks.",
+    description: "Chemical products, recipes and production runs, synced live with QuickBooks.",
     path: "/portal/qb-chem",
     icon: FlaskConical,
     access: "admin",

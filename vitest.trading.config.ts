@@ -4,7 +4,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: "jsdom",
-    include: ["tests/portal.test.tsx", "tests/trading-app.test.tsx"],
+    include: ["tests/portal.test.tsx", "tests/trading-app.test.tsx", "tests/qbchem.test.tsx"],
     restoreMocks: true,
   },
 });
